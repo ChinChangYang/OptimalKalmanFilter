@@ -5,9 +5,9 @@ close all;
 rng(1, 'twister');
 solver = 'maxminmaxtcjade';
 fitfun = 'error_zeta';
-maxfunevals = 1e4;
+maxfunevals = 3e6;
 solverOptions1.dimensionFactor = 5;
-solverOptions1.F = 0.9;
+solverOptions1.F = 0.7;
 solverOptions1.CR = 0.99;
 solverOptions1.TolX = eps;
 solverOptions1.TolFun = eps;
@@ -165,5 +165,9 @@ if isfield(out, 'U_Converged_FEs')
 	xlabel('FEs');
 	ylabel('U_Converged_FEs');
 end
+
+save(sprintf('maxminmax_results_by_%s.mat', solver), ...
+	'xbest1', 'xbest2', 'xbest3', 'fbest', 'out');
+
 toc(startTime);
 end
