@@ -3,12 +3,12 @@ function [xminmax1, xminmax2, fminmax, out] = run_minmax
 startTime = tic;
 close all;
 rng(1, 'twister');
-solver = 'minmaxtcdebest1bin';
+solver = 'minmaxtcjadebin';
 fitfun = 'error_nozeta';
 D_Min = 4;
 D_Max = 4;
 D = D_Min + D_Max;
-maxfunevals = 1e5;
+maxfunevals = 1e6;
 solverOptions1.dimensionFactor = 5;
 solverOptions1.F = 0.7;
 solverOptions1.CR = 0.99;
