@@ -17,7 +17,7 @@ out=1;
 in=2;
 r0=0.95; 
 r=0.91;  
-P=eye(state*1)*10^(-1);
+P=eye(state*1)*10^(-1); %#ok<*MFAMB>
 
 % convert the system(X) into the observe form(Xo)
 A=[A11 A12;-0.1 A22];
@@ -46,49 +46,56 @@ B2=B(2,:);
 
 D1=0;
 D2=0;
-d(:,1)=[D1;D2];
+% d(:,1)=[D1;D2];
 
-rstream = RandStream('mcg16807', 'Seed',4262);
-W=sqrt(Cov_W)*randn(rstream,state,data_amount);
+sprev = rng;
+rng(0, 'twister');
+% rstream = RandStream('mcg16807', 'Seed',4262);
+W=sqrt(Cov_W)*randn(state,data_amount);
 % W=invTo*sqrt(Cov_W)*invTo'*randn(rstream,state,data_amount);
 % W=invTo*sqrt(Cov_W)*invTo'*randn(state,data_amount);
-rstream = RandStream('mcg16807', 'Seed',91320);
-V=sqrt(Cov_V)*randn(rstream,out, data_amount);
+rng(3571, 'twister');
+% rstream = RandStream('mcg16807', 'Seed',91320);
+V=sqrt(Cov_V)*randn(out, data_amount);
+rng(sprev);
 % V=sqrt(Cov_V)*randn(out, data_amount);
 
-X(:,1)=zeros(state,1);
-X_h(:,1)=zeros(state,1);
-Y(:,1)=C*X(:,1)+V(:,1);
-epson(:,1)=Y(:,1);
-e(:,1)=Y(:,1);
-U(:,1)=zeros(in,1);
+X			= zeros(state, data_amount-1);
+X_h			= zeros(state, data_amount-1);
+Y			= zeros(1, data_amount-1);
+Y(1)		= C * X(:, 1)+V(:, 1);
+epsilon		= zeros(1, data_amount-1);
+epsilon(1)	= Y(1);
+e			= zeros(1, data_amount-1);
+e(1)		= Y(1);
+U			= zeros(in, data_amount-1);
 cita_k=[D1 D2]';
 
 for k=2:data_amount-1
    %k
    r=r0*r + (1-r0);
    if k==2
-      fi=[epson(:,k-1); zeros(out,1)];
+      fi=[epsilon(:,k-1); zeros(out,1)];
    else
-      fi=[epson(:,k-1); epson(:,k-2)];
+      fi=[epsilon(:,k-1); epsilon(:,k-2)];
    end;
    X(:,k)=[-A1  eye(out); -A2  zeros(out)]*X(:,k-1)+[B1; B2]*U(:,k-1)+W(:,k-1);
    Y(:,k)=C*X(:,k)+V(:,k);
    if k==2
-      epson(:,k)=Y(:,k)+A1*Y(:,k-1)-B1*U(:,k-1)-cita_k'*fi;
+      epsilon(:,k)=Y(:,k)+A1*Y(:,k-1)-B1*U(:,k-1)-cita_k'*fi;
    else
-      epson(:,k)=Y(:,k)+A1*Y(:,k-1)+A2*Y(:,k-2)-B1*U(:,k-1)-B2*U(:,k-2)-cita_k'*fi;   
+      epsilon(:,k)=Y(:,k)+A1*Y(:,k-1)+A2*Y(:,k-2)-B1*U(:,k-1)-B2*U(:,k-2)-cita_k'*fi;   
    end;
 
    cita=cita_k;
    G=(P*fi)/(r+fi'*P*fi);
-   cita_k=cita+G*epson(1,k);
+   cita_k=cita+G*epsilon(1,k);
    P=(P-((P*fi)*(P*fi)'/(r+fi'*P*fi)))/r;
    
    tmp=cita_k';
    D1=tmp(1,1);
    D2=tmp(1,2);
-   d(:,k)=[D1;D2];
+%    d(:,k)=[D1;D2];
    
    K=[D1-A1; D2-A2];
    
