@@ -371,8 +371,6 @@ while true
 		U_Converged_FEs(i) = innerOutU{i}.fes(end);
 		counteval = counteval + innerOutU{i}.fes(end);
 		fu(i) = -innerFbest;
-		
-		% Replacement
 	end
 	
 	% Replacement
@@ -443,7 +441,8 @@ end
 
 [fbest, fbestidx] = min(f);
 xbest1 = X(:, fbestidx);
-xbest2 = innerXbest(:, fbestidx);
+[~, fbestidx2] = min(innerState{fbestidx}.f);
+xbest2 = innerState{fbestidx}.X(:, fbestidx2);
 
 final.mu_F = mu_F;
 final.mu_CR = mu_CR;

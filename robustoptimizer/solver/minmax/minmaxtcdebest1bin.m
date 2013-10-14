@@ -70,8 +70,8 @@ NP2 = ceil(options2.dimensionFactor * D2);
 
 % Initialize contour data
 if isDisplayIter
-% 	[XX, YY, ZZ] = minmaxcontourdata(D1, lb1, ub1, lb2, ub2, fitfun);
-	load('minmaxcontourdata.mat');
+	[XX, YY, ZZ] = minmaxcontourdata(D1, lb1, ub1, lb2, ub2, fitfun);
+% 	load('minmaxcontourdata.mat');
 end
 
 % Initialize population
@@ -365,7 +365,8 @@ end
 
 [fbest, fbestidx] = min(f);
 xbest1 = X(:, fbestidx);
-xbest2 = innerXbest(:, fbestidx);
+[~, fbestidx2] = min(innerState{fbestidx}.f);
+xbest2 = innerState{fbestidx}.X(:, fbestidx2);
 
 final.innerState = innerState;
 out = finishoutput(out, X, f, counteval, 'final', final, ...

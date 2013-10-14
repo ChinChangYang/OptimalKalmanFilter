@@ -27,14 +27,14 @@ if nargin >= 7
 		hold on;
 		plot(X(1,:), X(2,:), 'kx', 'MarkerSize', 12, 'LineWidth', 2);
 		plot(U(1,:), U(2,:), 'rx', 'MarkerSize', 12, 'LineWidth', 2);
-		pause(0.02);
+		pause(0.01);
 	else
 		hold off;
 		plot(XX, YY);
 		hold on;
 		plot(X, f, 'kx');
 		plot(U, zeros(1, numel(U)), 'rx');
-		pause(0.02);
+		pause(0.01);
 	end
 end
 

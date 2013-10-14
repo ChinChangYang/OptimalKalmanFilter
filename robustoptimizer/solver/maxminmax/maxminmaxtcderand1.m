@@ -426,11 +426,13 @@ while true
 	end
 end
 
-[fbest, fbestidx] = min(f);
+[fbest, fbestidx1] = min(f);
 fbest = -fbest;
-xbest1 = X(:, fbestidx);
-xbest2 = innerXbest1(:, fbestidx);
-xbest3 = innerXbest2(:, fbestidx);
+xbest1 = X(:, fbestidx1);
+[~, fbestidx2] = min(innerState{fbestidx1}.f);
+xbest2 = innerState{fbestidx1}.X(:, fbestidx2);
+[~, fbestidx3] = min(innerState{fbestidx1}.innerState{fbestidx2}.f);
+xbest3 = innerState{fbestidx1}.innerState{fbestidx2}.X(:, fbestidx3);
 
 final.innerState = innerState;
 out = finishoutput(out, X, f, counteval, 'final', final, ...

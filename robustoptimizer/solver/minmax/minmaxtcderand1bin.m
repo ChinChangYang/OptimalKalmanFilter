@@ -373,7 +373,8 @@ end
 
 [fbest, fbestidx] = min(f);
 xbest1 = X(:, fbestidx);
-xbest2 = innerXbest(:, fbestidx);
+[~, fbestidx2] = min(innerState{fbestidx}.f);
+xbest2 = innerState{fbestidx}.X(:, fbestidx2);
 
 final.innerState = innerState;
 out = finishoutput(out, X, f, counteval, 'final', final, ...
