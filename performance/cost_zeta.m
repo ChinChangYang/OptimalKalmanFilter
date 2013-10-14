@@ -64,28 +64,36 @@ end;
 
 Cov_W=diag([W11  W22]);
 Cov_V=diag(V11);
-rstream = RandStream('mcg16807', 'Seed',4262);
-W=sqrt(Cov_W)*randn(rstream,state,data_amount);
+
+sprev = rng;
+rng(0, 'twister');
+% rstream = RandStream('mcg16807', 'Seed',4262);
+W=sqrt(Cov_W)*randn(state,data_amount);
 % W=invTo*sqrt(Cov_W)*invTo'*randn(rstream,state,data_amount);
 % W=invTo*sqrt(Cov_W)*invTo'*randn(state,data_amount);
-rstream = RandStream('mcg16807', 'Seed',91320);
-V=sqrt(Cov_V)*randn(rstream,out,data_amount);
+rng(3571, 'twister');
+% rstream = RandStream('mcg16807', 'Seed',91320);
+V=sqrt(Cov_V)*randn(out,data_amount);
+rng(sprev);
 % V=sqrt(Cov_V)*randn(out,data_amount);
 
 
-X(:,1)=[0.1;-0.1];
-X_h(:,1)=zeros(state,1);
+X			= zeros(state, data_amount);
+X(:,1)		= [0.1;-0.1];
+X_h			= zeros(state, data_amount);
 % Xo(:,1)=zeros(state,1);
 % Xo_h(:,1)=zeros(state,1);
-Y(:,1)=C*X(:,1)+V(:,1);
-U(:,1)=zeros(in,1);
-e(:,1)=Y(:,1);
+Y			= zeros(1, data_amount);
+Y(1)		= C * X(:, 1) + V(:, 1);
+U			= zeros(in, data_amount);
+e			= zeros(1, data_amount);
+e(1)		= Y(1);
 sum=(X(:,1)-X_h(:,1))'*(X(:,1)-X_h(:,1));
 for k=2:data_amount
    X(:,k)=[-A1  eye(out); -A2  zeros(out)]*X(:,k-1)+[B1; B2]*U(:,k-1)+W(:,k-1);
    Y(:,k)=C*X(:,k)+V(:,k);
    
-   X_h(:,k)=AA*X_h(:,k-1)+BB*U(:,k-1)+K*zeta*e(:,k-1);
+   X_h(:,k) = AA * X_h(:,k-1) + BB * U(:, k-1) + K * zeta * e(:,k-1);
    e(:,k)=Y(:,k)-CC*X_h(:,k);
    U(:,k)=0;
    sum=sum+(X(:,k)-X_h(:,k))'*(X(:,k)-X_h(:,k));
