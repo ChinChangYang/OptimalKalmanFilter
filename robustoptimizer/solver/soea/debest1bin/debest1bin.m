@@ -20,6 +20,11 @@ defaultOptions.TolStagnationIteration = 20;
 defaultOptions.initial.X = [];
 defaultOptions.initial.f = [];
 
+defaultOptions.TolCon = 1e-6;
+defaultOptions.nonlcon = [];
+defaultOptions.initial.cv = []; % Constraint violation measure
+defaultOptions.initial.nvc = []; % Number of violated constraints
+
 options = setdefoptions(options, defaultOptions);
 dimensionFactor = options.dimensionFactor;
 CR = options.CR;
@@ -30,10 +35,22 @@ ftarget = options.ftarget;
 TolFun = options.TolFun;
 TolX = options.TolX;
 TolStagnationIteration = options.TolStagnationIteration;
-D = numel(lb);
-X = options.initial.X;
-f = options.initial.f;
+TolCon = options.TolCon;
+nonlcon = options.nonlcon;
 
+if ~isempty(options.initial)
+	X = options.initial.X;
+	f = options.initial.f;
+	cv = options.initial.cv;
+	nvc = options.initial.nvc;
+else
+	X = [];
+	f = [];
+	cv = [];
+	nvc = [];
+end
+
+D = numel(lb);
 if isempty(X)
 	NP = ceil(dimensionFactor * D);
 else
@@ -67,18 +84,38 @@ if isempty(X)
 	end
 end
 
+% Constraint violation measure
+if isempty(cv) || isempty(nvc)
+	cv = zeros(1, NP);
+	nvc = zeros(1, NP);
+	
+	if ~isempty(nonlcon)		
+		for i = 1 : NP
+			[c, ceq] = feval(nonlcon, X(:, i));
+			cv(i) = sum(c) + sum(ceq);
+			nvc(i) = sum(c > 0) + sum(ceq > 0);
+		end
+	end
+end
+
 % Evaluation
 if isempty(f)
 	f = zeros(1, NP);
 	for i = 1 : NP
-		f(i) = feval(fitfun, X(:, i));
-		counteval = counteval + 1;
+		if nvc(i) > 0
+			f(i) = inf;
+		else
+			f(i) = feval(fitfun, X(:, i));
+			counteval = counteval + 1;
+		end
 	end
 end
 
 % Initialize variables
 V = X;
 U = X;
+cv_u = cv;
+nvc_u = nvc;
 
 % Display
 if isDisplayIter
@@ -95,7 +132,7 @@ while true
 	% Termination conditions
 	outofmaxfunevals = counteval > maxfunevals - NP;
 	reachftarget = min(f) <= ftarget;
-	fitnessconvergence = isConverged(f, TolFun);
+	fitnessconvergence = isConverged(f, TolFun) && isConverged(cv, TolCon);
 	solutionconvergence = isConverged(X, TolX);
 	stagnation = countStagnation >= TolStagnationIteration;
 	
@@ -146,13 +183,44 @@ while true
 		displayitermessages(X, U, f, countiter, XX, YY, ZZ);
 	end
 	
+	% Constraint violation measure
+	if ~isempty(nonlcon)
+		for i = 1 : NP
+			[c, ceq] = feval(nonlcon, U(:, i));
+			cv_u(i) = sum(c) + sum(ceq);
+			nvc_u(i) = sum(c > 0) + sum(ceq > 0);
+		end
+	end
+	
 	% Selection
-	counteval = counteval + NP;
 	FailedIteration = true;
 	for i = 1 : NP
-		fui = feval(fitfun, U(:, i));
+		fui = inf;
 		
-		if fui < f(i)
+		if nvc(i) == 0 && nvc_u(i) == 0
+			fui = feval(fitfun, U(:, i));
+			counteval = counteval + 1;
+			
+			if fui < f(i)
+				u_selected = true;
+			else
+				u_selected = false;
+			end
+		elseif nvc(i) > nvc_u(i)
+			u_selected = true;
+		elseif nvc(i) < nvc_u(i)
+			u_selected = false;
+		else % nvc(i) == nvc_u(i) && nvc(i) ~= 0 && nvc_u(i) ~= 0
+			if cv(i) > cv_u(i)
+				u_selected = true;
+			else
+				u_selected = false;
+			end
+		end			
+		
+		if u_selected
+			cv(i) = cv_u(i);
+			nvc(i) = nvc_u(i);
 			f(i) = fui;
 			X(:, i) = U(:, i);
 			FailedIteration = false;
@@ -181,5 +249,8 @@ if fmin < out.bestever.fmin
 	out.bestever.xmin = xmin;
 end
 
-out = finishoutput(out, X, f, counteval);
+final.cv = cv;
+final.nvc = nvc;
+
+out = finishoutput(out, X, f, counteval, 'final', final);
 end

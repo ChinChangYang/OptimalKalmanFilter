@@ -1,15 +1,40 @@
 function display_inner_info(innerState)
 %DISPLAY_INNER_INFO Display information of inner states
-
 n_innerState = numel(innerState);
-[D, ~] = size(innerState{1}.X);
-stdX = zeros(D, n_innerState);
-fstd = zeros(1, n_innerState);
+
+noNaN_index = -1;
+for i = 1 : n_innerState
+	if ~isempty(innerState{i})
+		noNaN_index = i;
+		break;
+	end
+end
+
+[D, ~] = size(innerState{noNaN_index}.X);
+stdX = nan(D, n_innerState);
+fstd = nan(1, n_innerState);
+N_noNaN = 0;
 
 for i = 1 : n_innerState
-	stdX(:, i) = std(innerState{i}.X, 0, 2);
-	fstd(i) = std(innerState{i}.f);
+	if ~isempty(innerState{i})
+		stdX(:, i) = std(innerState{i}.X, 0, 2);
+		fstd(i) = std(innerState{i}.f);
+		N_noNaN = N_noNaN + 1;
+	end
 end
+
+fstd(isnan(fstd)) = [];
+stdX_noNaN = zeros(D, N_noNaN);
+i_stdX_noNaN = 1;
+
+for i = 1 : n_innerState
+	if all(~isnan(stdX(:, i)))
+		stdX_noNaN(:, i_stdX_noNaN) = stdX(:, i);
+		i_stdX_noNaN = i_stdX_noNaN + 1;
+	end
+end
+
+stdX = stdX_noNaN;
 
 minStdX = min(stdX, [], 2);
 maxStdX = max(stdX, [], 2);
