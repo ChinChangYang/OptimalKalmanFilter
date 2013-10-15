@@ -1,14 +1,15 @@
-function f = error_zeta(x,y,z)
+function f = error_zeta(x, y, z)
 % Establish the table with Kalman Gain
 % x: weight
 % y: filter
 % z: system
-[flag,K] = KalmanGain(y);
-if (flag == 1)
-    f = 1e10;  %penalty
-    return;
-end
-[f,flag] = cost_zeta(y,K,z,x);
-if (flag == 1)
-    f = 1e10;  %penalty
+A	= [	y(1),	y(2); ...
+		-0.1,	y(3)];
+C	= [ 0,		y(4)];
+Q	= [ 0.005,	0; ...
+		0,		0.005];
+R	= 0.001;
+
+K = FeedbackGain(A, C, Q, R);
+f = cost_zeta(y, K, z, x);
 end
