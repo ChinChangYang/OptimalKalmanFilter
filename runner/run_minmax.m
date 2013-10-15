@@ -1,5 +1,9 @@
 function [xminmax1, xminmax2, fminmax, out] = run_minmax
 %RUN_MINMAX Run the minimax problem
+if matlabpool('size') == 0
+	matlabpool('open');
+end
+
 startTime = tic;
 close all;
 rng(1, 'twister');
@@ -18,11 +22,13 @@ solverOptions1.TolFun = 0;
 solverOptions1.Display = 'iter';
 solverOptions1.RecordPoint = 1000;
 solverOptions1.TolX_DecayRate = 0.5;
+solverOptions1.nonlcon = 'ConstraintViolation';
 solverOptions2.dimensionFactor = 5;
 solverOptions2.F = 0.7;
 solverOptions2.CR = 0.5;
-solverOptions2.TolX = 1e-4;
+solverOptions2.TolX = 0;
 solverOptions2.TolFun = 0;
+solverOptions2.nonlcon = 'ConstraintViolation';
 lb1 = [0.3; -0.05; -0.05; 0.9];
 ub1 = [0.5; 0.25; 0.45; 1.1];
 lb2 = lb1;
