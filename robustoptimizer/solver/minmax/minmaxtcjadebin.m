@@ -401,7 +401,7 @@ while true
 	
 	% Selection
 	innerMaxfunevalsX = 20 * NP2;
-	for i = 1 : NP1
+	parfor i = 1 : NP1
 		% Compute fxi, f(i)
 		if nvc(i) == 0
 			innerFitfunXi = @(X2) -feval(fitfun, X(:, i), X2);
