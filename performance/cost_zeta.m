@@ -9,14 +9,9 @@ A12 = S_AC(2);
 A22 = S_AC(3);
 C12 = S_AC(4);
 
-W11 = 0.005;
-W22 = 0.005;
-V11 = 0.001;
-
 %%%%% initialize
 data_amount=400;
 state=2;
-out=1;
 in=2;
 
 A_Kf = [K_AC(1)  K_AC(2); -0.1  K_AC(3)];
@@ -28,16 +23,8 @@ A_Sys = [A11 A12; -0.1  A22];
 B_Sys = eye(2);
 C_Sys = [0 C12];
 
-Cov_W=diag([W11  W22]);
-Cov_V=diag(V11);
-
-sprev = rng;
-rng(0, 'twister');
-W=sqrt(Cov_W)*randn(state,data_amount);
-rng(3571, 'twister');
-V=sqrt(Cov_V)*randn(out,data_amount);
-rng(sprev);
-
+W = getW;
+V = getV;
 
 X			= zeros(state, data_amount);
 X(:,1)		= [0.1;-0.1];
