@@ -163,10 +163,11 @@ while true
 	fitnessconvergence = isConverged(f, TolFun) && isConverged(cv, TolCon);
 	solutionconvergence = isConverged(X, TolX);
 	stagnation = countStagnation >= TolStagnationIteration;
+	feasible = any(~isinf(f));
 	
 	% Convergence conditions	
-	if outofmaxfunevals || reachftarget || fitnessconvergence || ...
-			solutionconvergence || stagnation
+	if outofmaxfunevals || feasible && (reachftarget || fitnessconvergence || ...
+			solutionconvergence || stagnation)
 		break;
 	end
 	
