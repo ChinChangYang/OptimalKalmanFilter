@@ -1,4 +1,4 @@
-function cost = cost_zeta(K_AC, K, S_AC, weight)
+function [cost, X, X_h] = cost_zeta(K_AC, K, S_AC, weight)
 % K_AC:		Kalman filter
 % K:		Kalman Gain
 % S_AC:		System
