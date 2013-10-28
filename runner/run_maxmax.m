@@ -1,12 +1,12 @@
-function run_max
-%RUN_MAX Run the max problem
+function run_maxmax
+%RUN_MAX Run the max-max problem
 startTime = tic;
 close all;
 rng(1, 'twister');
 solver = 'jadebin';
 fitfun = 'error_nominal';
 fhandle = @(x) -error_nominal(x);
-D = 4;
+D = 8;
 maxfunevals = 3e6;
 solverOptions.dimensionFactor = 20;
 solverOptions.F = 0.9;
@@ -15,9 +15,9 @@ solverOptions.TolX = 0;
 solverOptions.TolFun = 0;
 solverOptions.Display = 'iter';
 solverOptions.RecordPoint = 1000;
-solverOptions.nonlcon = 'ConstraintViolation';
-lb = [0.3; -0.05; -0.05; 0.9];
-ub = [0.5; 0.25; 0.45; 1.1];
+% solverOptions.nonlcon = 'ConstraintViolation';
+lb = [0.3; -0.05; -0.05; 0.9; 0.3; -0.05; -0.05; 0.9];
+ub = [0.5; 0.25; 0.45; 1.1; 0.5; 0.25; 0.45; 1.1];
 [xmin, fmin, out] = ...
 	feval(solver, fhandle, lb, ub, maxfunevals, solverOptions);
 fprintf('out.bestever.xmin = \n');
