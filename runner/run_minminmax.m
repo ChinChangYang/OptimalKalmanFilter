@@ -12,21 +12,20 @@ fitfun = 'minminmax_problem';
 D_Min = 5;
 D_Max = 4;
 D = D_Min + D_Max;
-maxfunevals = 1e7;
+maxfunevals = 2e7;
 solverOptions1.dimensionFactor = 5;
-solverOptions1.F = 0.7;
-solverOptions1.CR = 0.99;
-solverOptions1.TolX = 1e-5;
+solverOptions1.F = 0.9;
+solverOptions1.CR = 0.5;
+solverOptions1.TolX = 1e-6;
 solverOptions1.TolFun = 0;
 solverOptions1.Display = 'iter';
 solverOptions1.RecordPoint = 1000;
 solverOptions1.nonlcon = 'ConstraintViolation';
 solverOptions2.dimensionFactor = 5;
-solverOptions2.F = 0.7;
+solverOptions2.F = 0.9;
 solverOptions2.CR = 0.5;
 solverOptions2.TolX = 0;
 solverOptions2.TolFun = 0;
-solverOptions2.nonlcon = 'ConstraintViolation';
 
 lb1 = [0.3; -0.05; -0.05; 0.9; 0.7];
 ub1 = [0.5; 0.25; 0.45; 1.1; 1.3];
@@ -173,8 +172,10 @@ if isfield(out, 'U_Converged_FEs')
 	ylabel('U_Converged_FEs');
 end
 
-save(sprintf('minminmax_results_by_%s.mat', solver), ...
-	'xminmax1', 'xminmax2', 'fminmax');
+save(sprintf('minminmax_results_by_%s_%s.mat', ...
+	solver, ...
+	datestr(now, 'yyyymmddHHMM')), ...
+	'xminmax1', 'xminmax2', 'fminmax', 'out');
 
 toc(startTime);
 end

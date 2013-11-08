@@ -12,18 +12,15 @@ fitfun = 'error_zeta';
 maxfunevals = 1e8;
 solverOptions1.dimensionFactor = 5;
 solverOptions1.F = 0.7;
-solverOptions1.CR = 0.99;
-solverOptions1.TolX = 1e-5;
+solverOptions1.CR = 0.9;
+solverOptions1.TolX = 1e-6;
 solverOptions1.TolFun = eps;
-solverOptions1.TolX_DecayRate = 0.5;
 solverOptions1.Display = 'iter';
 solverOptions1.RecordPoint = 1000;
 solverOptions2.dimensionFactor = 5;
-solverOptions2.TolX = 1e-5;
-solverOptions2.nonlcon = 'ConstraintViolation';
+solverOptions2.TolX = 1e-6;
 solverOptions3.dimensionFactor = 5;
 solverOptions3.TolX = eps;
-solverOptions3.nonlcon = 'ConstraintViolation';
 lb1 = 0.7;
 ub1 = 1.3;
 lb2 = [0.3; -0.05; -0.05; 0.9];
@@ -174,7 +171,9 @@ if isfield(out, 'U_Converged_FEs')
 	ylabel('U_Converged_FEs');
 end
 
-save(sprintf('maxminmax_results_by_%s.mat', solver), ...
+save(sprintf('maxminmax_results_by_%s_%s.mat', ...
+	solver, ...
+	datestr(now, 'yyyymmddHHMM')), ...
 	'xbest1', 'xbest2', 'xbest3', 'fbest', 'out');
 
 toc(startTime);
