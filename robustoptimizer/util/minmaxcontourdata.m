@@ -18,7 +18,7 @@ if D == 1
 	[XX, YY] = meshgrid(vx, vy);
 	ZZ = zeros(numel(vx), numel(vy));
 	for i = 1 : numel(vx)
-		for j = 1 : numel(vy)
+		parfor j = 1 : numel(vy)
 			y = my;
 			y(1) = YY(i, j);
 			ZZ(i, j) = feval(fitfun, XX(i, j), y);
@@ -35,7 +35,7 @@ else
 			x = mx;
 			x(1:2) = [XX(i, j); YY(i, j)];
 			fitfunX2i = @(y) -feval(fitfun, x, y);
-			XX2 = jadebin(fitfunX2i, lb2, ub2, 1e2);
+			XX2 = jadebin(fitfunX2i, lb2, ub2, numel(lb2)^2 * 1e2);
 			ZZ(i, j) = feval(fitfun, x, XX2);
 		end
 	end

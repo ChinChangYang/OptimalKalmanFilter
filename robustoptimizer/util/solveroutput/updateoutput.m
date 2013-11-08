@@ -4,10 +4,6 @@ if isempty(out.recordFEs)
 	return;
 end
 
-if numel(out.recordFEs) < out.iRecordFEs
-	return
-end
-
 if counteval >= out.recordFEs(out.iRecordFEs)
 	[fmin, fminidx] = min(f);
 	xmin = X(:, fminidx);

@@ -9,8 +9,8 @@ if nargin <= 4
 end
 
 defaultOptions.dimensionFactor = 5;
-defaultOptions.CR = 0.5;
 defaultOptions.F = 0.7;
+defaultOptions.CR = 0.5;
 defaultOptions.Display = 'off';
 defaultOptions.RecordPoint = 100;
 defaultOptions.ftarget = -Inf;
@@ -22,8 +22,8 @@ defaultOptions.initial.f = [];
 
 defaultOptions.TolCon = 1e-6;
 defaultOptions.nonlcon = [];
-defaultOptions.initial.cv = []; % Constraint violation measure
-defaultOptions.initial.nvc = []; % Number of violated constraints
+defaultOptions.initial.cm = []; % Constraint violation measure
+defaultOptions.initial.nc = []; % Number of violated constraints
 
 options = setdefoptions(options, defaultOptions);
 dimensionFactor = options.dimensionFactor;
@@ -41,13 +41,13 @@ nonlcon = options.nonlcon;
 if ~isempty(options.initial)
 	X = options.initial.X;
 	f = options.initial.f;
-	cv = options.initial.cv;
-	nvc = options.initial.nvc;
+	cm = options.initial.cm;
+	nc = options.initial.nc;
 else
 	X = [];
 	f = [];
-	cv = [];
-	nvc = [];
+	cm = [];
+	nc = [];
 end
 
 D = numel(lb);
@@ -85,15 +85,22 @@ if isempty(X)
 end
 
 % Constraint violation measure
-if isempty(cv) || isempty(nvc)
-	cv = zeros(1, NP);
-	nvc = zeros(1, NP);
+if isempty(cm) || isempty(nc)
+	cm = zeros(1, NP);
+	nc = zeros(1, NP);
 	
-	if ~isempty(nonlcon)		
+	for i = 1 : NP
+		clb = lb - X(:, i);
+		cub = X(:, i) - ub;
+		cm(i) = sum(clb(clb > 0)) + sum(cub(cub > 0));
+		nc(i) = sum(clb > 0) + sum(cub > 0);
+	end
+	
+	if ~isempty(nonlcon)
 		for i = 1 : NP
 			[c, ceq] = feval(nonlcon, X(:, i));
-			cv(i) = sum(c) + sum(ceq);
-			nvc(i) = sum(c > 0) + sum(ceq > 0);
+			cm(i) = cm(i) + sum(c(c > 0)) + sum(ceq(ceq > 0));
+			nc(i) = nc(i) + sum(c > 0) + sum(ceq > 0);
 		end
 	end
 end
@@ -102,7 +109,7 @@ end
 if isempty(f)
 	f = zeros(1, NP);
 	for i = 1 : NP
-		if nvc(i) > 0
+		if nc(i) > 0
 			f(i) = inf;
 		else
 			f(i) = feval(fitfun, X(:, i));
@@ -111,11 +118,35 @@ if isempty(f)
 	end
 end
 
+% Sort
+pf = zeros(1, NP);
+nf = f;
+nf(isinf(nf)) = [];
+nfmax = max(nf);
+nfmin = min(nf);
+ncm = cm;
+ncmmax = max(ncm);
+ncmmin = min(ncm);
+
+for i = 1 : NP
+	if nc(i) == 0
+		pf(i) = (f(i) - nfmin) / (nfmax - nfmin + eps);
+	else
+		pf(i) = nc(i) + (ncm(i) - ncmmin) / (ncmmax - ncmmin + eps);
+	end
+end
+
+[pf, pfidx] = sort(pf);
+f = f(pfidx);
+X = X(:, pfidx);
+cm = cm(pfidx);
+nc = nc(pfidx);
+
 % Initialize variables
 V = X;
 U = X;
-cv_u = cv;
-nvc_u = nvc;
+cm_u = cm;
+nc_u = nc;
 
 % Display
 if isDisplayIter
@@ -132,14 +163,14 @@ while true
 	% Termination conditions
 	outofmaxfunevals = counteval > maxfunevals - NP;
 	reachftarget = min(f) <= ftarget;
-	fitnessconvergence = isConverged(f, TolFun) && isConverged(cv, TolCon);
+	fitnessconvergence = all(nc == 0) && isConverged(f, TolFun) ...
+		&& isConverged(cm, TolCon);
 	solutionconvergence = isConverged(X, TolX);
 	stagnation = countStagnation >= TolStagnationIteration;
-	feasible = any(~isinf(f));
 	
-	% Convergence conditions	
-	if outofmaxfunevals || feasible && (reachftarget || fitnessconvergence || ...
-			solutionconvergence || stagnation)
+	% Convergence conditions
+	if outofmaxfunevals || reachftarget || fitnessconvergence || ...
+			solutionconvergence || stagnation
 		break;
 	end
 	
@@ -168,28 +199,24 @@ while true
 		end
 	end
 	
-	% Repair
-	for i = 1 : NP
-		for j = 1 : D
-			if U(j, i) < lb(j)
-				U(j, i) = X(j, i) + rand * (lb(j) - X(j, i));
-			elseif U(j, i) > ub(j)
-				U(j, i) = X(j, i) + rand * (ub(j) - X(j, i));
-			end
-		end
-	end
-	
 	% Display
 	if isDisplayIter
 		displayitermessages(X, U, f, countiter, XX, YY, ZZ);
 	end
 	
 	% Constraint violation measure
+	for i = 1 : NP
+		clb = lb - U(:, i);
+		cub = U(:, i) - ub;
+		cm_u(i) = sum(clb(clb > 0)) + sum(cub(cub > 0));
+		nc_u(i) = sum(clb > 0) + sum(cub > 0);
+	end
+	
 	if ~isempty(nonlcon)
 		for i = 1 : NP
 			[c, ceq] = feval(nonlcon, U(:, i));
-			cv_u(i) = sum(c) + sum(ceq);
-			nvc_u(i) = sum(c > 0) + sum(ceq > 0);
+			cm_u(i) = cm_u(i) + sum(c(c > 0)) + sum(ceq(ceq > 0));
+			nc_u(i) = nc_u(i) + sum(c > 0) + sum(ceq > 0);
 		end
 	end
 	
@@ -198,7 +225,7 @@ while true
 	for i = 1 : NP
 		fui = inf;
 		
-		if nvc(i) == 0 && nvc_u(i) == 0
+		if nc(i) == 0 && nc_u(i) == 0
 			fui = feval(fitfun, U(:, i));
 			counteval = counteval + 1;
 			
@@ -207,26 +234,49 @@ while true
 			else
 				u_selected = false;
 			end
-		elseif nvc(i) > nvc_u(i)
+		elseif nc(i) > nc_u(i)
 			u_selected = true;
-		elseif nvc(i) < nvc_u(i)
+		elseif nc(i) < nc_u(i)
 			u_selected = false;
 		else % nvc(i) == nvc_u(i) && nvc(i) ~= 0 && nvc_u(i) ~= 0
-			if cv(i) > cv_u(i)
+			if cm(i) > cm_u(i)
 				u_selected = true;
 			else
 				u_selected = false;
 			end
-		end			
+		end
 		
 		if u_selected
-			cv(i) = cv_u(i);
-			nvc(i) = nvc_u(i);
+			cm(i) = cm_u(i);
+			nc(i) = nc_u(i);
 			f(i) = fui;
 			X(:, i) = U(:, i);
 			FailedIteration = false;
 		end
 	end
+	
+	% Sort
+	nf = f;
+	nf(isinf(nf)) = [];
+	nfmax = max(nf);
+	nfmin = min(nf);
+	ncm = cm;
+	ncmmax = max(ncm);
+	ncmmin = min(ncm);
+	
+	for i = 1 : NP
+		if nc(i) == 0
+			pf(i) = (f(i) - nfmin) / (nfmax - nfmin + eps);
+		else
+			pf(i) = nc(i) + (ncm(i) - ncmmin) / (ncmmax - ncmmin + eps);
+		end
+	end
+	
+	[pf, pfidx] = sort(pf);
+	f = f(pfidx);
+	X = X(:, pfidx);
+	cm = cm(pfidx);
+	nc = nc(pfidx);
 	
 	% Record
 	out = updateoutput(out, X, f, counteval);
@@ -239,19 +289,19 @@ while true
 		countStagnation = countStagnation + 1;
 	else
 		countStagnation = 0;
-	end	
+	end
 end
 
-[fmin, fminidx] = min(f);
-xmin = X(:, fminidx);
+fmin = f(1);
+xmin = X(:, 1);
 
 if fmin < out.bestever.fmin
 	out.bestever.fmin = fmin;
 	out.bestever.xmin = xmin;
 end
 
-final.cv = cv;
-final.nvc = nvc;
+final.cm = cm;
+final.nc = nc;
 
 out = finishoutput(out, X, f, counteval, 'final', final);
 end

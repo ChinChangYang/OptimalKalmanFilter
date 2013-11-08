@@ -26,14 +26,13 @@ D2 = numel(lb2);
 % Default options for Layer 1
 defaultOptions1.dimensionFactor = 10;
 defaultOptions1.F = 0.9;
-defaultOptions1.CR = 0.99;
+defaultOptions1.CR = 0.5;
 defaultOptions1.Display = 'off';
 defaultOptions1.RecordPoint = 100;
 defaultOptions1.ftarget = -Inf;
 defaultOptions1.TolX = 0;
 defaultOptions1.TolFun = 0;
 defaultOptions1.TolStagnationIteration = 20;
-defaultOptions1.TolX_DecayRate = 0.5;
 defaultOptions1.InnerSolver = 'debest1bin';
 defaultOptions1.initial.X = [];
 defaultOptions1.initial.f = [];
@@ -41,14 +40,16 @@ defaultOptions1.initial.innerState = [];
 
 defaultOptions1.TolCon = 1e-6;
 defaultOptions1.nonlcon = [];
-defaultOptions1.initial.cv = []; % Constraint violation measure
-defaultOptions1.initial.nvc = []; % Number of violated constraints
+defaultOptions1.innerMaxIter = 100;
+defaultOptions1.reinitFactor = 0.1;
+defaultOptions1.migrateFactor = 0.8;
+defaultOptions1.archiveSizeFactor = 4;
 
 options1 = setdefoptions(options1, defaultOptions1);
 
 % Default options for Layer 2
 defaultOptions2.dimensionFactor = 10;
-defaultOptions2.F = 0.9;
+defaultOptions2.F = 0.7;
 defaultOptions2.Display = 'off';
 defaultOptions2.RecordPoint = 0;
 defaultOptions2.TolFun = 0;
@@ -64,17 +65,18 @@ RecordPoint = max(0, floor(options1.RecordPoint));
 TolFun = options1.TolFun;
 TolX = options1.TolX;
 TolStagnationIteration = options1.TolStagnationIteration;
-TolX_DecayRate = options1.TolX_DecayRate;
 innerSolver = options1.InnerSolver;
 TolCon = options1.TolCon;
 nonlcon = options1.nonlcon;
+innerMaxIter = options1.innerMaxIter;
+reinitFactor = options1.reinitFactor;
+migrateFactor = options1.migrateFactor;
+archiveSizeFactor = options1.archiveSizeFactor;
 
 X = options1.initial.X;
 f = options1.initial.f;
 innerState = options1.initial.innerState;
 existInnerState = ~isempty(innerState);
-cv = options1.initial.cv;
-nvc = options1.initial.nvc;
 
 NP1 = ceil(dimensionFactor * D1);
 NP2 = ceil(options2.dimensionFactor * D2);
@@ -82,7 +84,6 @@ NP2 = ceil(options2.dimensionFactor * D2);
 % Initialize contour data
 if isDisplayIter
 	[XX, YY, ZZ] = minmaxcontourdata(D1, lb1, ub1, lb2, ub2, fitfun);
-% 	load('minmaxcontourdata.mat');
 end
 
 % Initialize population
@@ -121,8 +122,10 @@ V2 = zeros(D2, NP2, NP1);
 fu = zeros(1, NP1);
 innerOutX = cell(1, NP1);
 innerOutU = cell(1, NP1);
-cv_u = zeros(1, NP1);
-nvc_u = zeros(1, NP1);
+cm_u = zeros(1, NP1);
+nc_u = zeros(1, NP1);
+reinitNP2 = ceil(reinitFactor * NP2);
+archiveSize = ceil(archiveSizeFactor * NP1);
 
 out = initoutput(RecordPoint, D1, NP1, maxfunevals, ...
 	'innerFstd', ...
@@ -131,44 +134,60 @@ out = initoutput(RecordPoint, D1, NP1, maxfunevals, ...
 	'X_Converged_FEs', ...
 	'U_Converged_FEs');
 
-% Constraint violation measure
-if isempty(cv) || isempty(nvc)
-	cv = zeros(1, NP1);
-	nvc = zeros(1, NP1);
-	
-	if ~isempty(nonlcon)
-		for i = 1 : NP1
-			[c, ceq] = feval(nonlcon, X(:, i));
-			cv(i) = sum(c) + sum(ceq);
-			nvc(i) = sum(c > 0) + sum(ceq > 0);
-		end
-	end
-end
-
 % Evaluation
 if isempty(f)
 	f = zeros(1, NP1);
-	innerMaxfunevalsX = NP2;
+	innerMaxfunevalsX = innerMaxIter * NP2;
 	
-	for i = 1 : NP1
-		if nvc(i) > 0
-			f(i) = inf;
-		else
-			innerFitfun = @(y) -feval(fitfun, X(:, i), y);
-			optionsX2i = options2;
-			
-			if existInnerState
-				optionsX2i.initial = innerState{i};
-			end
-			
-			[innerXbest(:, i), innerFbest, innerOut] = ...
-				feval(innerSolver, innerFitfun, ...
-				lb2, ub2, innerMaxfunevalsX, optionsX2i);
-			
-			counteval = counteval + innerOut.fes(end);
-			f(i) = -innerFbest;
-			innerState{i} = innerOut.final;
+	parfor i = 1 : NP1
+		innerFitfun = @(y) -feval(fitfun, X(:, i), y);
+		optionsX2i = options2;
+		
+		if ~isempty(nonlcon)
+			innerNonlcon = @(y) feval(nonlcon, X(:, i), y);
+			optionsX2i.nonlcon = innerNonlcon;
 		end
+		
+		if existInnerState
+			optionsX2i.initial = innerState{i};
+		end
+		
+		[innerXbest(:, i), innerFbest, innerOut] = ...
+			feval(innerSolver, innerFitfun, ...
+			lb2, ub2, innerMaxfunevalsX, optionsX2i);
+		
+		counteval = counteval + innerOut.fes(end);
+		f(i) = -innerFbest;
+		innerState{i} = innerOut.final;
+	end
+end
+
+% Initialize archive
+archive = repmat(innerXbest, 1, archiveSizeFactor);
+
+% Constraint violation measure
+cm = zeros(1, NP1);
+nc = zeros(1, NP1);
+
+for i = 1 : NP1
+	clb = lb1 - X(:, i);
+	cub = X(:, i) - ub1;
+	cm(i) = sum(clb(clb > 0)) + sum(cub(cub > 0));
+	nc(i) = sum(clb > 0) + sum(cub > 0);
+end
+
+for i = 1 : NP1
+	clb = lb2 - innerXbest(:, i);
+	cub = innerXbest(:, i) - ub2;
+	cm(i) = cm(i) + sum(clb(clb > 0)) + sum(cub(cub > 0));
+	nc(i) = nc(i) + sum(clb > 0) + sum(cub > 0);
+end
+
+if ~isempty(nonlcon)
+	for i = 1 : NP1
+		[cx, ceqx] = feval(nonlcon, X(:, i), innerXbest(:, i));
+		cm(i) = cm(i) + sum(cx(cx > 0)) + sum(ceqx(ceqx > 0));
+		nc(i) = nc(i) + sum(cx > 0) + sum(ceqx > 0);
 	end
 end
 
@@ -178,30 +197,38 @@ nf = f;
 nf(isinf(nf)) = [];
 nfmax = max(nf);
 nfmin = min(nf);
-ncv = cv;
-ncvmax = max(ncv);
-ncvmin = min(ncv);
+cmmax = max(cm);
+cmmin = min(cm);
 
 for i = 1 : NP1
-	if nvc(i) == 0
+	if nc(i) == 0
 		pf(i) = (f(i) - nfmin) / (nfmax - nfmin + eps);
 	else
-		pf(i) = nvc(i) + (ncv(i) - ncvmin) / (ncvmax - ncvmin + eps);
+		pf(i) = nc(i) + (cm(i) - cmmin) / (cmmax - cmmin + eps);
 	end
 end
 
-[~, pfidx] = sort(pf);
+[pf, pfidx] = sort(pf);
 f = f(pfidx);
 X = X(:, pfidx);
+innerXbest = innerXbest(:, pfidx);
 innerState = innerState(pfidx);
-cv = cv(pfidx);
-nvc = nvc(pfidx);
+cm = cm(pfidx);
+nc = nc(pfidx);
 
 % Display
 if isDisplayIter
-	displayitermessages([X; innerXbest], [X; innerXbest], f, countiter, ...
-		XX, YY, ZZ, 'counteval', counteval, ...
-		'successRate', successRate);
+	if all(isinf(f))
+		displayitermessages([X; innerXbest], [X; innerXbest], ...
+			cm, countiter, ...
+			XX, YY, ZZ, 'counteval', counteval, ...
+			'successRate', successRate);
+	else
+		displayitermessages([X; innerXbest], [X; innerXbest], ...
+			f(~isinf(f)), countiter, ...
+			XX, YY, ZZ, 'counteval', counteval, ...
+			'successRate', successRate);
+	end
 	
 	display_inner_info(innerState);
 end
@@ -219,7 +246,7 @@ countiter = countiter + 1;
 while true
 	% Termination conditions
 	outofmaxfunevals = counteval >= maxfunevals;
-	fitnessconvergence = isConverged(f, TolFun) && isConverged(cv, TolCon);
+	fitnessconvergence = isConverged(f, TolFun) && isConverged(cm, TolCon);
 	solutionconvergence = isConverged(X, TolX);
 	stagnation = countStagnation >= TolStagnationIteration;
 	
@@ -253,23 +280,6 @@ while true
 			
 			% Check boundary
 			if all(V(:, i) >= lb1) && all(V(:, i) <= ub1)
-				
-				if ~isempty(innerState{1}) && ...
-						~isempty(innerState{r1}) && ...
-						~isempty(innerState{r2})
-					
-					% Prediction
-					V2(:, :, i) = innerState{1}.X + ...
-						Fi .* (innerState{r1}.X - innerState{r2}.X);
-					
-					% Perturbation
-					V2(:, :, i) = V2(:, :, i) .* (1 + 100 * eps * randn(D2, NP2));
-				else
-					for j = 1 : NP2
-						V2(:, j, i) = lb2 + (ub2 - lb2) .* rand(D2, 1);
-					end
-				end
-				
 				break;
 			end
 		end
@@ -288,99 +298,130 @@ while true
 		end
 	end
 	
-	% Repair
+	% Prediction
+	anyEmptyInnerState = false;
 	for i = 1 : NP1
-		for j = 1 : D1
-			if U(j, i) < lb1(j)
-				U(j, i) = 2 * lb1(j) - U(j, i);
-			elseif U(j, i) > ub1(j)
-				U(j, i) = 2 * ub1(j) - U(j, i);
-			else
-				continue;
+		if isempty(innerState{i})
+			anyEmptyInnerState = true;
+			break;
+		end
+	end
+	
+	if ~anyEmptyInnerState		
+		for i = 1 : NP1			
+			% Copy from itselfs individuals
+			for j = 1 : NP2
+				V2(:, j, i) = innerState{i}.X(:, j);
 			end
 			
-			if U(j, i) < lb1(j)
-				U(j, i) = lb1(j);
-			elseif U(j, i) > ub1(j)
-				U(j, i) = ub1(j);
+			% Copy from archive
+			n_migration = ceil(migrateFactor * NP2);
+			beginIndex = NP2 - n_migration - reinitNP2;
+			for j = 1 : n_migration
+				r = floor(archiveSize * rand + 1);
+				V2(:, beginIndex + j, i) = archive(:, r);
 			end
+			
+			% Reinitialization
+			for j = (NP2 - reinitNP2 + 1) : NP2
+				V2(:, j, i) = ...
+					lb2 + (ub2 - lb2) .* rand(D2, 1);
+			end
+		end
+	else		
+		for i = 1 : NP1
+			for j = 1 : NP2
+				V2(:, j, i) = lb2 + (ub2 - lb2) .* rand(D2, 1);
+			end
+		end
+	end
+	
+	% Selection
+	innerMaxfunevalsX = innerMaxIter * NP2;
+	parfor i = 1 : NP1
+		% Compute fxi, f(i)
+		innerFitfunXi = @(X2) -feval(fitfun, X(:, i), X2);
+		optionsX2i = options2;
+		optionsX2i.initial = innerState{i};
+		optionsX2i.initial.X = V2(:, :, i);
+		optionsX2i.initial.f = [];
+		optionsX2i.initial.mu_F = [];
+		optionsX2i.initial.mu_CR = [];
+		optionsX2i.initial.cm = [];
+		optionsX2i.initial.nc = [];
+		
+		if ~isempty(nonlcon)
+			optionsX2i.nonlcon = @(X2) feval(nonlcon, X(:, i), X2);
 		end
 		
-		for j = 1 : NP2
-			for k = 1 : D2
-				if V2(k, j, i) < lb2(k)
-					V2(k, j, i) = 2 * lb2(k) - V2(k, j, i);
-				elseif V2(k, j, i) > ub2(k)
-					V2(k, j, i) = 2 * ub2(k) - V2(k, j, i);
-				else
-					continue;
-				end
-				
-				if V2(k, j, i) < lb2(k)
-					V2(k, j, i) = lb2(k);
-				elseif V2(k, j, i) > ub2(k)
-					V2(k, j, i) = ub2(k);
-				end
-			end
+		[innerXbest(:, i), innerFbest, innerOutX{i}] = ...
+			feval(innerSolver, innerFitfunXi, ...
+			lb2, ub2, ...
+			innerMaxfunevalsX, optionsX2i);
+		
+		X_Converged_FEs(i) = innerOutX{i}.fes(end);
+		counteval = counteval + innerOutX{i}.fes(end);
+		f(i) = -innerFbest;
+		
+		% Compute fui
+		fitfunU2i = @(U2) -feval(fitfun, U(:, i), U2);
+		optionsU2i = options2;
+		optionsU2i.initial = innerState{i};
+		optionsU2i.initial.X = V2(:, :, i);
+		optionsU2i.initial.f = [];
+		optionsU2i.initial.mu_F = [];
+		optionsU2i.initial.mu_CR = [];
+		optionsU2i.initial.cm = [];
+		optionsU2i.initial.nc = [];
+		
+		if ~isempty(nonlcon)
+			optionsU2i.nonlcon = @(U2) feval(nonlcon, U(:, i), U2);
 		end
+		
+		[innerUbest(:, i), innerFbest, innerOutU{i}] = ...
+			feval(innerSolver, fitfunU2i, ...
+			lb2, ub2, ...
+			innerMaxfunevalsX, optionsU2i);
+		
+		U_Converged_FEs(i) = innerOutU{i}.fes(end);
+		counteval = counteval + innerOutU{i}.fes(end);
+		fu(i) = -innerFbest;
 	end
 	
 	% Constraint violation measure
-	if ~isempty(nonlcon)
-		for i = 1 : NP1
-			[c, ceq] = feval(nonlcon, U(:, i));
-			cv_u(i) = sum(c) + sum(ceq);
-			nvc_u(i) = sum(c > 0) + sum(ceq > 0);
-		end
+	for i = 1 : NP1
+		clb = lb1 - X(:, i);
+		cub = X(:, i) - ub1;
+		cm(i) = sum(clb(clb > 0)) + sum(cub(cub > 0));
+		nc(i) = sum(clb > 0) + sum(cub > 0);
+		
+		clb = lb1 - U(:, i);
+		cub = U(:, i) - ub1;
+		cm_u(i) = sum(clb(clb > 0)) + sum(cub(cub > 0));
+		nc_u(i) = sum(clb > 0) + sum(cub > 0);
 	end
 	
-	% TolX Decision
-	innerTolX = TolX_DecayRate * computeInnerMeanXstd(innerState);
-	
-	% Selection
-	innerMaxfunevalsX = 20 * NP2;
 	for i = 1 : NP1
-		% Compute fxi, f(i)
-		if nvc(i) == 0
-			innerFitfunXi = @(X2) -feval(fitfun, X(:, i), X2);
-			optionsX2i = options2;
-			optionsX2i.initial = innerState{i};
-			optionsX2i.TolX = max(options2.TolX, innerTolX);
+		clb = lb2 - innerXbest(:, i);
+		cub = innerXbest(:, i) - ub2;
+		cm(i) = cm(i) + sum(clb(clb > 0)) + sum(cub(cub > 0));
+		nc(i) = nc(i) + sum(clb > 0) + sum(cub > 0);
+				
+		clb = lb2 - innerUbest(:, i);
+		cub = innerUbest(:, i) - ub2;
+		cm_u(i) = cm_u(i) + sum(clb(clb > 0)) + sum(cub(cub > 0));
+		nc_u(i) = nc_u(i) + sum(clb > 0) + sum(cub > 0);
+	end
+	
+	if ~isempty(nonlcon)
+		for i = 1 : NP1
+			[cx, ceqx] = feval(nonlcon, X(:, i), innerXbest(:, i));
+			cm(i) = cm(i) + sum(cx(cx > 0)) + sum(ceqx(ceqx > 0));
+			nc(i) = nc(i) + sum(cx > 0) + sum(ceqx > 0);
 			
-			[innerXbest(:, i), innerFbest, innerOutX{i}] = ...
-				feval(innerSolver, innerFitfunXi, ...
-				lb2, ub2, ...
-				innerMaxfunevalsX, optionsX2i);
-			
-			X_Converged_FEs(i) = innerOutX{i}.fes(end);
-			counteval = counteval + innerOutX{i}.fes(end);
-			f(i) = -innerFbest;
-		else
-			innerOutX{i}.final = [];
-		end
-		
-		% Compute fui
-		if nvc_u(i) == 0
-			fitfunU2i = @(U2) -feval(fitfun, U(:, i), U2);
-			optionsU2i = options2;
-			optionsU2i.initial = innerState{i};
-			optionsU2i.initial.X = V2(:, :, i);
-			optionsU2i.initial.f = [];
-			optionsU2i.initial.cv = [];
-			optionsU2i.initial.nvc = [];
-			optionsU2i.TolX = max(options2.TolX, innerTolX);
-			
-			[innerUbest(:, i), innerFbest, innerOutU{i}] = ...
-				feval(innerSolver, fitfunU2i, ...
-				lb2, ub2, ...
-				innerMaxfunevalsX, optionsU2i);
-			
-			U_Converged_FEs(i) = innerOutU{i}.fes(end);
-			counteval = counteval + innerOutU{i}.fes(end);
-			fu(i) = -innerFbest;
-		else
-			fu(i) = inf;
-			innerOutU{i}.final = [];
+			[cu, cequ] = feval(nonlcon, U(:, i), innerUbest(:, i));
+			cm_u(i) = cm_u(i) + sum(cu(cu > 0)) + sum(cequ(cequ > 0));
+			nc_u(i) = nc_u(i) + sum(cu > 0) + sum(cequ > 0);
 		end
 	end
 	
@@ -388,18 +429,18 @@ while true
 	successRate = 0;
 	FailedIteration = true;
 	for i = 1 : NP1
-		if nvc(i) == 0 && nvc_u(i) == 0
+		if nc(i) == 0 && nc_u(i) == 0
 			if fu(i) < f(i)
 				u_selected = true;
 			else
 				u_selected = false;
 			end
-		elseif nvc(i) > nvc_u(i)
+		elseif nc(i) > nc_u(i)
 			u_selected = true;
-		elseif nvc(i) < nvc_u(i)
+		elseif nc(i) < nc_u(i)
 			u_selected = false;
 		else % nvc(i) == nvc_u(i) && nvc(i) ~= 0 && nvc_u(i) ~= 0
-			if cv(i) > cv_u(i)
+			if cm(i) > cm_u(i)
 				u_selected = true;
 			else
 				u_selected = false;
@@ -407,8 +448,8 @@ while true
 		end
 		
 		if u_selected
-			cv(i) = cv_u(i);
-			nvc(i) = nvc_u(i);
+			cm(i) = cm_u(i);
+			nc(i) = nc_u(i);
 			f(i) = fu(i);
 			X(:, i) = U(:, i);
 			innerXbest(:, i) = innerUbest(:, i);
@@ -422,38 +463,53 @@ while true
 	
 	% Display
 	if isDisplayIter
-		displayitermessages([X; innerXbest], [U; innerUbest], f, countiter, ...
-			XX, YY, ZZ, 'counteval', counteval, ...
-			'successRate', successRate, ...
-			'X_Converged_FEs', mean(X_Converged_FEs), ...
-			'U_Converged_FEs', mean(U_Converged_FEs));
+		if all(isinf(f))
+			displayitermessages([X; innerXbest], [X; innerXbest], ...
+				cm, countiter, ...
+				XX, YY, ZZ, 'counteval', counteval, ...
+				'successRate', successRate);
+		else
+			displayitermessages([X; innerXbest], [X; innerXbest], ...
+				f(~isinf(f)), countiter, ...
+				XX, YY, ZZ, 'counteval', counteval, ...
+				'successRate', successRate);
+		end
 		
 		display_inner_info(innerState);
+		
+% 		largerThanSix = sum(innerXbest > -3) / numel(innerXbest); % experimental
+% 		fprintf('innerXbest > -3: %.2f%%\n', largerThanSix * 100); % experimental
+% 		largerThanSix = sum(archive > -3) / numel(archive); % experimental
+% 		fprintf('archive > -3: %.2f%%\n', largerThanSix * 100); % experimental
 	end
+	
+	% Update archive
+	randindex = randperm(archiveSize);
+	archive(:, randindex(1 : NP1)) = innerXbest;
 	
 	% Sort
 	nf = f;
 	nf(isinf(nf)) = [];
 	nfmax = max(nf);
 	nfmin = min(nf);
-	ncv = cv;
-	ncvmax = max(ncv);
-	ncvmin = min(ncv);
+	cmmax = max(cm);
+	cmmin = min(cm);
 	
 	for i = 1 : NP1
-		if nvc(i) == 0
+		if nc(i) == 0
 			pf(i) = (f(i) - nfmin) / (nfmax - nfmin + eps);
 		else
-			pf(i) = nvc(i) + (ncv(i) - ncvmin) / (ncvmax - ncvmin + eps);
+			pf(i) = nc(i) + (cm(i) - cmmin) / (cmmax - cmmin + eps);
 		end
 	end
 	
-	[~, pfidx] = sort(pf);
+	[pf, pfidx] = sort(pf);
+	cm = cm(pfidx);
+	nc = nc(pfidx);
 	f = f(pfidx);
 	X = X(:, pfidx);
+	innerXbest = innerXbest(:, pfidx);
 	innerState = innerState(pfidx);
-	cv = cv(pfidx);
-	nvc = nvc(pfidx);
 	
 	% Record
 	out = updateoutput(out, X, f, counteval, ...
@@ -474,14 +530,11 @@ while true
 	end
 end
 
-[fbest, fbestidx] = min(f);
-xbest1 = X(:, fbestidx);
-[~, fbestidx2] = min(innerState{fbestidx}.f);
-xbest2 = innerState{fbestidx}.X(:, fbestidx2);
+xbest1 = X(:, 1);
+fbest = f(1);
+xbest2 = innerState{1}.X(:, 1);
 
 final.innerState = innerState;
-final.cv = cv;
-final.nvc = nvc;
 
 out = finishoutput(out, X, f, counteval, 'final', final, ...
 	'innerFstd', computeInnerFstd(innerState), ...

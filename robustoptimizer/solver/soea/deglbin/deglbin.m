@@ -9,30 +9,50 @@ if nargin <= 4
 end
 
 defaultOptions.dimensionFactor = 10;
-defaultOptions.CR = 0.5;
 defaultOptions.F = 0.7;
+defaultOptions.CR = 0.5;
 defaultOptions.NeighborhoodRatio = 0.1;
 defaultOptions.Display = 'off';
 defaultOptions.RecordPoint = 100;
 defaultOptions.ftarget = -Inf;
 defaultOptions.TolFun = eps;
 defaultOptions.TolX = 100 * eps;
+defaultOptions.TolStagnationIteration = 20;
 defaultOptions.initial.X = [];
 defaultOptions.initial.f = [];
 defaultOptions.initial.w = [];
 
+defaultOptions.TolCon = 1e-6;
+defaultOptions.nonlcon = [];
+defaultOptions.initial.cm = []; % Constraint violation measure
+defaultOptions.initial.nc = []; % Number of violated constraints
+
 options = setdefoptions(options, defaultOptions);
-dimensionFactor = options.dimensionFactor;
+dimensionFactor = max(1, options.dimensionFactor);
 CR = options.CR;
 F = options.F;
 isDisplayIter = strcmp(options.Display, 'iter');
-RecordPoint = max(1, floor(options.RecordPoint));
+RecordPoint = max(0, floor(options.RecordPoint));
 ftarget = options.ftarget;
 TolFun = options.TolFun;
 TolX = options.TolX;
-X = options.initial.X;
-f = options.initial.f;
-w = options.initial.w;
+TolStagnationIteration = options.TolStagnationIteration;
+TolCon = options.TolCon;
+nonlcon = options.nonlcon;
+
+if ~isempty(options.initial)
+	X = options.initial.X;
+	f = options.initial.f;
+	w = options.initial.w;
+	cm = options.initial.cm;
+	nc = options.initial.nc;
+else
+	X = [];
+	f = [];
+	w = [];
+	cm = [];
+	nc = [];
+end
 
 alpha = F;
 beta = F;
@@ -47,7 +67,12 @@ end
 % Initialize variables
 counteval = 0;
 countiter = 1;
+countStagnation = 0;
 out = initoutput(RecordPoint, D, NP, maxfunevals);
+
+if isempty(w)	
+	w = 0.05 + 0.9 * rand(1, NP);
+end
 
 % Initialize contour data
 if isDisplayIter
@@ -70,24 +95,72 @@ if isempty(X)
 	end
 end
 
+% Constraint violation measure
+if isempty(cm) || isempty(nc)
+	cm = zeros(1, NP);
+	nc = zeros(1, NP);
+	
+	for i = 1 : NP
+		clb = lb - X(:, i);
+		cub = X(:, i) - ub;
+		cm(i) = sum(clb(clb > 0)) + sum(cub(cub > 0));
+		nc(i) = sum(clb > 0) + sum(cub > 0);
+	end
+	
+	if ~isempty(nonlcon)		
+		for i = 1 : NP
+			[c, ceq] = feval(nonlcon, X(:, i));
+			cm(i) = cm(i) + sum(c(c > 0)) + sum(ceq(ceq > 0));
+			nc(i) = nc(i) + sum(c > 0) + sum(ceq > 0);
+		end
+	end
+end
+
 % Evaluation
 if isempty(f)
 	f = zeros(1, NP);
 	for i = 1 : NP
-		f(i) = feval(fitfun, X(:, i));
-		counteval = counteval + 1;
+		if nc(i) > 0
+			f(i) = inf;
+		else
+			f(i) = feval(fitfun, X(:, i));
+			counteval = counteval + 1;
+		end
 	end
 end
 
-% Initialize variables
-if isempty(w)	
-	w = 0.05 + 0.9 * rand(1, NP);
+% Sort
+pf = zeros(1, NP);
+nf = f;
+nf(isinf(nf)) = [];
+nfmax = max(nf);
+nfmin = min(nf);
+ncm = cm;
+ncmmax = max(ncm);
+ncmmin = min(ncm);
+
+for i = 1 : NP
+	if nc(i) == 0
+		pf(i) = (f(i) - nfmin) / (nfmax - nfmin + eps);
+	else
+		pf(i) = nc(i) + (ncm(i) - ncmmin) / (ncmmax - ncmmin + eps);
+	end
 end
 
+[pf, pfidx] = sort(pf);
+f = f(pfidx);
+X = X(:, pfidx);
+cm = cm(pfidx);
+nc = nc(pfidx);
+w = w(pfidx);
+
+% Initialize variables
 k = ceil(0.5 * (options.NeighborhoodRatio * NP));
 wc = w;
 V = X;
 U = X;
+cm_u = cm;
+nc_u = nc;
 
 % Display
 if isDisplayIter
@@ -102,23 +175,22 @@ countiter = countiter + 1;
 
 while true
 	% Termination conditions
-	stdf = std(f);
-	stdX = std(X, 0, 2);
-	meanX = mean(X, 2);
 	outofmaxfunevals = counteval > maxfunevals - NP;
 	reachftarget = min(f) <= ftarget;
-	fitnessconvergence = stdf <= mean(abs(f)) * 100 * eps || stdf <= realmin || stdf <= TolFun;
-	solutionconvergence = all(stdX <= meanX * 100 * eps) || all(stdX <= 100 * realmin) || ...
-		all(stdX <= TolX);
+	fitnessconvergence = all(nc == 0) && isConverged(f, TolFun) ...
+		&& isConverged(cm, TolCon);
+	solutionconvergence = isConverged(X, TolX);
+	stagnation = countStagnation >= TolStagnationIteration;
 	
-	% Convergence conditions
-	if outofmaxfunevals || reachftarget || fitnessconvergence || solutionconvergence
+	% Convergence conditions	
+	if outofmaxfunevals || reachftarget || fitnessconvergence || ...
+			solutionconvergence || stagnation
 		break;
 	end
 	
 	% Mutation
 	% Global best
-	[~, g_best] = min(f);
+	g_best = 1;
 	
 	for i = 1 : NP
 		% Neiborhoods index
@@ -195,43 +267,103 @@ while true
 		end
 	end
 	
-	% Repair
-	for i = 1 : NP
-		for j = 1 : D
-			if U(j, i) < lb(j)
-				U(j, i) = X(j, i) + rand * (lb(j) - X(j, i));
-			elseif U(j, i) > ub(j)
-				U(j, i) = X(j, i) + rand * (ub(j) - X(j, i));
-			end
-		end
-	end
-	
 	% Display
 	if isDisplayIter
 		displayitermessages(X, U, f, countiter, XX, YY, ZZ);
 	end
 	
-	% Selection
-	counteval = counteval + NP;
+	% Constraint violation measure		
 	for i = 1 : NP
-		fui = feval(fitfun, U(:, i));
+		clb = lb - U(:, i);
+		cub = U(:, i) - ub;
+		cm_u(i) = sum(clb(clb > 0)) + sum(cub(cub > 0));
+		nc_u(i) = sum(clb > 0) + sum(cub > 0);
+	end
+	
+	if ~isempty(nonlcon)		
+		for i = 1 : NP
+			[c, ceq] = feval(nonlcon, U(:, i));
+			cm_u(i) = cm_u(i) + sum(c(c > 0)) + sum(ceq(ceq > 0));
+			nc_u(i) = nc_u(i) + sum(c > 0) + sum(ceq > 0);
+		end
+	end
+	
+	% Selection
+	FailedIteration = true;
+	for i = 1 : NP
+		fui = inf;
 		
-		if fui < f(i)
+		if nc(i) == 0 && nc_u(i) == 0
+			fui = feval(fitfun, U(:, i));
+			counteval = counteval + 1;
+			
+			if fui < f(i)
+				u_selected = true;
+			else
+				u_selected = false;
+			end
+		elseif nc(i) > nc_u(i)
+			u_selected = true;
+		elseif nc(i) < nc_u(i)
+			u_selected = false;
+		else % nvc(i) == nvc_u(i) && nvc(i) ~= 0 && nvc_u(i) ~= 0
+			if cm(i) > cm_u(i)
+				u_selected = true;
+			else
+				u_selected = false;
+			end
+		end			
+		
+		if u_selected
+			cm(i) = cm_u(i);
+			nc(i) = nc_u(i);			
 			f(i) = fui;
 			X(:, i) = U(:, i);
 			w(i) = wc(i);
+			FailedIteration = false;
 		end
 	end
+	
+	% Sort	
+	nf = f;
+	nf(isinf(nf)) = [];
+	nfmax = max(nf);
+	nfmin = min(nf);
+	ncm = cm;
+	ncmmax = max(ncm);
+	ncmmin = min(ncm);
+	
+	for i = 1 : NP
+		if nc(i) == 0
+			pf(i) = (f(i) - nfmin) / (nfmax - nfmin + eps);
+		else
+			pf(i) = nc(i) + (ncm(i) - ncmmin) / (ncmmax - ncmmin + eps);
+		end
+	end
+	
+	[pf, pfidx] = sort(pf);
+	f = f(pfidx);
+	X = X(:, pfidx);
+	cm = cm(pfidx);
+	nc = nc(pfidx);
+	w = w(pfidx);
 	
 	% Record
 	out = updateoutput(out, X, f, counteval);
 	
 	% Iteration counter
 	countiter = countiter + 1;
+	
+	% Stagnation iteration
+	if FailedIteration
+		countStagnation = countStagnation + 1;
+	else
+		countStagnation = 0;
+	end	
 end
 
-[fmin, fminidx] = min(f);
-xmin = X(:, fminidx);
+fmin = f(1);
+xmin = X(:, 1);
 
 if fmin < out.bestever.fmin
 	out.bestever.fmin = fmin;
@@ -239,6 +371,9 @@ if fmin < out.bestever.fmin
 end
 
 % Final state of this algorithm
+final.cm = cm;
+final.nc = nc;
 final.w = w;
+
 out = finishoutput(out, X, f, counteval, 'final', final);
 end
