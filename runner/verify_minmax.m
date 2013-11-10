@@ -1,9 +1,9 @@
 function verify_minmax
 %VERIFY_MINMAX Verify the minmax solution
 
-fminmax = 0.011266023826734;
-xminmax1 = [0.499993943885155;0.208998958696985;-0.049993312660394;0.900056101395770];
-xminmax2 = [0.499999999999996;0.249999999864576;-0.049999999999995;0.900000000000391];
+fminmax = 0.0120347390864446;
+xminmax1 = [0.499994432810761;0.041377184011307;0.249768724165629;0.900005183763698];
+xminmax2 = [0.500000000000000;-0.050000000000000;-0.050000000000000;1.100000000000000];
 counter = 0;
 
 % Verify f(xminmax1, xminmax2)
@@ -50,7 +50,7 @@ ub = [0.5; 0.25; 0.45; 1.1];
 [~, fmin, ~] = ...
 	feval('jadebin', fitfun, lb, ub, maxfunevals, solverOptions);
 
-if fmin < fminmax
+if abs(fminmax + fmin) > 1e-7
 	counter = counter + 1;	
 	fprintf('Failed: xminmax1 is not the minimaximizer\n');
 end

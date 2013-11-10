@@ -8,7 +8,7 @@ load('maxmax_results_by_jadebin_20131027.mat');
 f1 = -fmin;
 p = abs(f0 - f1)/abs(f0);
 fprintf('|maxmax - minmin|/|minmin| = %.2f%%\n', p * 100);
-load('minmax_results_by_minmaxtcjadebin_20131025.mat');
+load('minmax_results_by_minmaxtcjadebin_201311081215.mat');
 f1 = fminmax;
 p = abs(f0 - f1)/abs(f0);
 fprintf('|minmax - minmin|/|minmin| = %.2f%%\n', p * 100);
