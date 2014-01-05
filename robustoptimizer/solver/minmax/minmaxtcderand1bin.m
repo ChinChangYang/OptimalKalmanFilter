@@ -1,6 +1,6 @@
 function [xbest1, xbest2, fbest, out] = minmaxtcderand1bin(fitfun, ...
 	maxfunevals, lb1, ub1, lb2, ub2, options1, options2)
-% MINMAXTCDERAND1BIN Min-Max Tracer Coevolutionary DE/rand/1
+% MINMAXTCDERAND1BIN Sequential Min-Max DE/rand/1/bin with archive
 % MINMAXTCDERAND1BIN(fitfun, maxfunevals1, lb1, ub1, lb2, ub2) minimizes the
 % function fitfun1 associated with a maximizer among box limitations [lb1,
 % ub1] of minimizers and [lb2, ub2] of maximizers for the maximal function
@@ -40,16 +40,16 @@ defaultOptions1.initial.innerState = [];
 
 defaultOptions1.TolCon = 1e-6;
 defaultOptions1.nonlcon = [];
-defaultOptions1.innerMaxIter = 100;
-defaultOptions1.reinitFactor = 0.1;
-defaultOptions1.migrateFactor = 0.8;
-defaultOptions1.archiveSizeFactor = 4;
+defaultOptions1.innerMaxIter = 200;
+defaultOptions1.reinitFactor = 0.5;
+defaultOptions1.migrateFactor = 0.25;
+defaultOptions1.archiveSizeFactor = 5;
 
 options1 = setdefoptions(options1, defaultOptions1);
 
 % Default options for Layer 2
 defaultOptions2.dimensionFactor = 10;
-defaultOptions2.F = 0.7;
+defaultOptions2.F = 0.9;
 defaultOptions2.Display = 'off';
 defaultOptions2.RecordPoint = 0;
 defaultOptions2.TolFun = 0;
@@ -83,7 +83,9 @@ NP2 = ceil(options2.dimensionFactor * D2);
 
 % Initialize contour data
 if isDisplayIter
-	[XX, YY, ZZ] = minmaxcontourdata(D1, lb1, ub1, lb2, ub2, fitfun);
+	contourOptions.nonlcon = nonlcon;
+	[XX, YY, ZZ, CC] = ...
+		cminmaxcontourdata(D1, lb1, ub1, lb2, ub2, fitfun, contourOptions);
 end
 
 % Initialize population
@@ -109,6 +111,7 @@ end
 
 % Initialize variables
 counteval = 0;
+countcon = 0;
 countiter = 1;
 countStagnation = 0;
 successRate = 0;
@@ -152,13 +155,17 @@ if isempty(f)
 			optionsX2i.initial = innerState{i};
 		end
 		
-		[innerXbest(:, i), innerFbest, innerOut] = ...
+		[innerXbest(:, i), innerFbest, innerOutX{i}] = ...
 			feval(innerSolver, innerFitfun, ...
 			lb2, ub2, innerMaxfunevalsX, optionsX2i);
 		
-		counteval = counteval + innerOut.fes(end);
 		f(i) = -innerFbest;
-		innerState{i} = innerOut.final;
+		innerState{i} = innerOutX{i}.final;
+	end
+	
+	for i = 1 : NP1		
+		counteval = counteval + innerOutX{i}.fes(end);
+		countcon = countcon + innerOutX{i}.countcon;
 	end
 end
 
@@ -186,6 +193,7 @@ end
 if ~isempty(nonlcon)
 	for i = 1 : NP1
 		[cx, ceqx] = feval(nonlcon, X(:, i), innerXbest(:, i));
+		countcon = countcon + 1;
 		cm(i) = cm(i) + sum(cx(cx > 0)) + sum(ceqx(ceqx > 0));
 		nc(i) = nc(i) + sum(cx > 0) + sum(ceqx > 0);
 	end
@@ -219,14 +227,14 @@ nc = nc(pfidx);
 % Display
 if isDisplayIter
 	if all(isinf(f))
-		displayitermessages([X; innerXbest], [X; innerXbest], ...
+		dispconitermsg([X; innerXbest], [X; innerXbest], ...
 			cm, countiter, ...
-			XX, YY, ZZ, 'counteval', counteval, ...
+			XX, YY, ZZ, CC, 'counteval', counteval, ...
 			'successRate', successRate);
 	else
-		displayitermessages([X; innerXbest], [X; innerXbest], ...
+		dispconitermsg([X; innerXbest], [X; innerXbest], ...
 			f(~isinf(f)), countiter, ...
-			XX, YY, ZZ, 'counteval', counteval, ...
+			XX, YY, ZZ, CC, 'counteval', counteval, ...
 			'successRate', successRate);
 	end
 	
@@ -350,13 +358,8 @@ while true
 		% Compute fxi, f(i)
 		innerFitfunXi = @(X2) -feval(fitfun, X(:, i), X2);
 		optionsX2i = options2;
-		optionsX2i.initial = innerState{i};
+		optionsX2i.initial = [];
 		optionsX2i.initial.X = V2(:, :, i);
-		optionsX2i.initial.f = [];
-		optionsX2i.initial.mu_F = [];
-		optionsX2i.initial.mu_CR = [];
-		optionsX2i.initial.cm = [];
-		optionsX2i.initial.nc = [];
 		
 		if ~isempty(nonlcon)
 			optionsX2i.nonlcon = @(X2) feval(nonlcon, X(:, i), X2);
@@ -368,19 +371,13 @@ while true
 			innerMaxfunevalsX, optionsX2i);
 		
 		X_Converged_FEs(i) = innerOutX{i}.fes(end);
-		counteval = counteval + innerOutX{i}.fes(end);
 		f(i) = -innerFbest;
 		
 		% Compute fui
 		fitfunU2i = @(U2) -feval(fitfun, U(:, i), U2);
 		optionsU2i = options2;
-		optionsU2i.initial = innerState{i};
+		optionsU2i.initial = [];
 		optionsU2i.initial.X = V2(:, :, i);
-		optionsU2i.initial.f = [];
-		optionsU2i.initial.mu_F = [];
-		optionsU2i.initial.mu_CR = [];
-		optionsU2i.initial.cm = [];
-		optionsU2i.initial.nc = [];
 		
 		if ~isempty(nonlcon)
 			optionsU2i.nonlcon = @(U2) feval(nonlcon, U(:, i), U2);
@@ -392,8 +389,14 @@ while true
 			innerMaxfunevalsX, optionsU2i);
 		
 		U_Converged_FEs(i) = innerOutU{i}.fes(end);
-		counteval = counteval + innerOutU{i}.fes(end);
 		fu(i) = -innerFbest;
+	end
+	
+	for i = 1 : NP1
+		counteval = counteval + innerOutX{i}.fes(end);
+		countcon = countcon + innerOutX{i}.countcon;
+		counteval = counteval + innerOutU{i}.fes(end);
+		countcon = countcon + innerOutU{i}.countcon;
 	end
 	
 	% Constraint violation measure
@@ -424,10 +427,12 @@ while true
 	if ~isempty(nonlcon)
 		for i = 1 : NP1
 			[cx, ceqx] = feval(nonlcon, X(:, i), innerXbest(:, i));
+			countcon = countcon + 1;
 			cm(i) = cm(i) + sum(cx(cx > 0)) + sum(ceqx(ceqx > 0));
 			nc(i) = nc(i) + sum(cx > 0) + sum(ceqx > 0);
 			
 			[cu, cequ] = feval(nonlcon, U(:, i), innerUbest(:, i));
+			countcon = countcon + 1;
 			cm_u(i) = cm_u(i) + sum(cu(cu > 0)) + sum(cequ(cequ > 0));
 			nc_u(i) = nc_u(i) + sum(cu > 0) + sum(cequ > 0);
 		end
@@ -472,14 +477,14 @@ while true
 	% Display
 	if isDisplayIter
 		if all(isinf(f))
-			displayitermessages([X; innerXbest], [X; innerXbest], ...
+			dispconitermsg([X; innerXbest], [X; innerXbest], ...
 				cm, countiter, ...
-				XX, YY, ZZ, 'counteval', counteval, ...
+				XX, YY, ZZ, CC, 'counteval', counteval, ...
 				'successRate', successRate);
 		else
-			displayitermessages([X; innerXbest], [X; innerXbest], ...
+			dispconitermsg([X; innerXbest], [X; innerXbest], ...
 				f(~isinf(f)), countiter, ...
-				XX, YY, ZZ, 'counteval', counteval, ...
+				XX, YY, ZZ, CC, 'counteval', counteval, ...
 				'successRate', successRate);
 		end
 		
@@ -549,5 +554,6 @@ out = finishoutput(out, X, f, counteval, 'final', final, ...
 	'innerMeanXstd', computeInnerMeanXstd(innerState), ...
 	'successRate', successRate, ...
 	'X_Converged_FEs', mean(X_Converged_FEs), ...
-	'U_Converged_FEs', mean(U_Converged_FEs));
+	'U_Converged_FEs', mean(U_Converged_FEs), ...
+	'countcon', countcon);
 end

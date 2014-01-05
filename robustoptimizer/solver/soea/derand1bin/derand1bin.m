@@ -39,6 +39,7 @@ TolCon = options.TolCon;
 nonlcon = options.nonlcon;
 
 if ~isempty(options.initial)
+	options.initial = setdefoptions(options.initial, defaultOptions.initial);
 	X = options.initial.X;
 	f = options.initial.f;
 	cm = options.initial.cm;
@@ -59,6 +60,7 @@ end
 
 % Initialize variables
 counteval = 0;
+countcon = 0;
 countiter = 1;
 countStagnation = 0;
 out = initoutput(RecordPoint, D, NP, maxfunevals);
@@ -99,6 +101,7 @@ if isempty(cm) || isempty(nc)
 	if ~isempty(nonlcon)
 		for i = 1 : NP
 			[c, ceq] = feval(nonlcon, X(:, i));
+			countcon = countcon + 1;
 			cm(i) = cm(i) + sum(c(c > 0)) + sum(ceq(ceq > 0));
 			nc(i) = nc(i) + sum(c > 0) + sum(ceq > 0);
 		end
@@ -215,6 +218,7 @@ while true
 	if ~isempty(nonlcon)
 		for i = 1 : NP
 			[c, ceq] = feval(nonlcon, U(:, i));
+			countcon = countcon + 1;
 			cm_u(i) = cm_u(i) + sum(c(c > 0)) + sum(ceq(ceq > 0));
 			nc_u(i) = nc_u(i) + sum(c > 0) + sum(ceq > 0);
 		end
@@ -303,5 +307,7 @@ end
 final.cm = cm;
 final.nc = nc;
 
-out = finishoutput(out, X, f, counteval, 'final', final);
+out = finishoutput(out, X, f, counteval, ...
+	'final', final, ...
+	'countcon', countcon);
 end

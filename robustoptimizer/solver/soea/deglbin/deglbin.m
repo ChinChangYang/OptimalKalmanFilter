@@ -9,7 +9,6 @@ if nargin <= 4
 end
 
 defaultOptions.dimensionFactor = 10;
-defaultOptions.F = 0.7;
 defaultOptions.CR = 0.5;
 defaultOptions.NeighborhoodRatio = 0.1;
 defaultOptions.Display = 'off';
@@ -30,7 +29,6 @@ defaultOptions.initial.nc = []; % Number of violated constraints
 options = setdefoptions(options, defaultOptions);
 dimensionFactor = max(1, options.dimensionFactor);
 CR = options.CR;
-F = options.F;
 isDisplayIter = strcmp(options.Display, 'iter');
 RecordPoint = max(0, floor(options.RecordPoint));
 ftarget = options.ftarget;
@@ -41,6 +39,7 @@ TolCon = options.TolCon;
 nonlcon = options.nonlcon;
 
 if ~isempty(options.initial)
+	options.initial = setdefoptions(options.initial, defaultOptions.initial);
 	X = options.initial.X;
 	f = options.initial.f;
 	w = options.initial.w;
@@ -54,8 +53,6 @@ else
 	nc = [];
 end
 
-alpha = F;
-beta = F;
 D = numel(lb);
 
 if isempty(X)
@@ -66,6 +63,7 @@ end
 
 % Initialize variables
 counteval = 0;
+countcon = 0;
 countiter = 1;
 countStagnation = 0;
 out = initoutput(RecordPoint, D, NP, maxfunevals);
@@ -93,6 +91,10 @@ if isempty(X)
 	for i = 1 : NP
 		X(:, i) = lb + (ub - lb) .* LHS(:, i);
 	end
+	
+	% dirty magic	
+	X(:, end-1) = lb + abs(1e-7 * randn);
+	X(:, end) = ub - abs(1e-7 * randn);
 end
 
 % Constraint violation measure
@@ -110,6 +112,7 @@ if isempty(cm) || isempty(nc)
 	if ~isempty(nonlcon)		
 		for i = 1 : NP
 			[c, ceq] = feval(nonlcon, X(:, i));
+			countcon = countcon + 1;
 			cm(i) = cm(i) + sum(c(c > 0)) + sum(ceq(ceq > 0));
 			nc(i) = nc(i) + sum(c > 0) + sum(ceq > 0);
 		end
@@ -193,6 +196,11 @@ while true
 	g_best = 1;
 	
 	for i = 1 : NP
+		% Generate random mutant factor F, and parameters, alpha and beta.
+		F = abs(0.5 * log(rand));
+		alpha = F;
+		beta = F;
+		
 		% Neiborhoods index
 		n_index = (i-k) : (i+k);
 		lessthanone = n_index < 1;
@@ -272,6 +280,17 @@ while true
 		displayitermessages(X, U, f, countiter, XX, YY, ZZ);
 	end
 	
+	% Repair
+	for i = 1 : NP
+		for j = 1 : D
+			if U(j, i) < lb(j)
+				U(j, i) = lb(j);
+			elseif U(j, i) > ub(j)
+				U(j, i) = ub(j);
+			end
+		end
+	end
+	
 	% Constraint violation measure		
 	for i = 1 : NP
 		clb = lb - U(:, i);
@@ -283,6 +302,7 @@ while true
 	if ~isempty(nonlcon)		
 		for i = 1 : NP
 			[c, ceq] = feval(nonlcon, U(:, i));
+			countcon = countcon + 1;
 			cm_u(i) = cm_u(i) + sum(c(c > 0)) + sum(ceq(ceq > 0));
 			nc_u(i) = nc_u(i) + sum(c > 0) + sum(ceq > 0);
 		end
@@ -375,5 +395,7 @@ final.cm = cm;
 final.nc = nc;
 final.w = w;
 
-out = finishoutput(out, X, f, counteval, 'final', final);
+out = finishoutput(out, X, f, counteval, ...
+	'final', final, ...
+	'countcon', countcon);
 end

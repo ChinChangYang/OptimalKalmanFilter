@@ -18,8 +18,8 @@ defaultOptions.w = 0.1;
 defaultOptions.Display = 'off';
 defaultOptions.RecordPoint = 100;
 defaultOptions.ftarget = -Inf;
-defaultOptions.TolFun = eps;
-defaultOptions.TolX = 100 * eps;
+defaultOptions.TolFun = 0;
+defaultOptions.TolX = 0;
 defaultOptions.TolStagnationIteration = 20;
 defaultOptions.initial.X = [];
 defaultOptions.initial.f = [];
@@ -75,6 +75,7 @@ end
 
 % Initialize variables
 counteval = 0;
+countcon = 0;
 countiter = 1;
 countStagnation = 0;
 out = initoutput(RecordPoint, D, NP, maxfunevals);
@@ -121,6 +122,7 @@ if isempty(cm) || isempty(nc)
 	if ~isempty(nonlcon)		
 		for i = 1 : NP
 			[c, ceq] = feval(nonlcon, X(:, i));
+			countcon = countcon + 1;
 			cm(i) = cm(i) + sum(c(c > 0)) + sum(ceq(ceq > 0));
 			nc(i) = nc(i) + sum(c > 0) + sum(ceq > 0);
 		end
@@ -258,7 +260,10 @@ while true
 				end
 			end
 							
-			V(:, i) = X(:, i) + F(i) * (X(:, pbest_idx) - X(:, i) + X(:, r1) - XA(:, r2));
+			V(:, i) = X(:, pbest_idx) + F(i) .* ...
+				(X(:, i) - X(:, i) + X(:, r1) - XA(:, r2));
+% 			V(:, i) = X(:, i) + F(i) .* ...
+% 				(X(:, pbest_idx) - X(:, i) + X(:, r1) - XA(:, r2));
 			
 			% Check boundary
 			if all(V(:, i) > lb) && all(V(:, i) < ub)
@@ -297,6 +302,7 @@ while true
 	if ~isempty(nonlcon)		
 		for i = 1 : NP
 			[c, ceq] = feval(nonlcon, U(:, i));
+			countcon = countcon + 1;
 			cm_u(i) = cm_u(i) + sum(c(c > 0)) + sum(ceq(ceq > 0));
 			nc_u(i) = nc_u(i) + sum(c > 0) + sum(ceq > 0);
 		end
@@ -404,5 +410,7 @@ final.mu_CR = mu_CR;
 final.cm = cm;
 final.nc = nc;
 
-out = finishoutput(out, X, f, counteval, 'final', final);
+out = finishoutput(out, X, f, counteval, ...
+	'final', final, ...
+	'countcon', countcon);
 end

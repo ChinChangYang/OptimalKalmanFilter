@@ -3,7 +3,7 @@ if nargin <= 6
 	options = [];
 end
 
-defaultOptions.Samples_One_Dimension = 50;
+defaultOptions.Samples_One_Dimension = 100;
 defaultOptions.Samples_Multi_Dimension = 10;
 defaultOptions.ScaleType = 'sqrt';
 options = setdefoptions(options, defaultOptions);
@@ -48,6 +48,4 @@ elseif strcmp(scaleType, 'log')
 elseif strcmp(scaleType, 'sqrtsqrt')
 	ZZ = (ZZ - min(ZZ(:)) + 1).^0.25;
 end
-
-save('minmaxcontourdata.mat', 'XX', 'YY', 'ZZ');
 end

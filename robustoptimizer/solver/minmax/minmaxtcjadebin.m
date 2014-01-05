@@ -1,7 +1,6 @@
 function [xbest1, xbest2, fbest, out] = minmaxtcjadebin(fitfun, ...
 	maxfunevals, lb1, ub1, lb2, ub2, options1, options2)
-% MINMAXTCJADEBIN Min-Max Tracer Coevolutionary JADE with binomial
-% crossover on the second layer
+% MINMAXTCJADEBIN Sequential Min-Max JADE with archive
 % MINMAXTCJADEBIN(fitfun, maxfunevals1, lb1, ub1, lb2, ub2) minimizes the
 % function fitfun1 associated with a maximizer among box limitations [lb1,
 % ub1] of minimizers and [lb2, ub2] of maximizers for the maximal function
@@ -13,6 +12,8 @@ function [xbest1, xbest2, fbest, out] = minmaxtcjadebin(fitfun, ...
 %
 % Property:
 % * Resumable solver (confirmed by test_resumable_minmax.m)
+
+% Check number of input arguments
 if nargin <= 6
 	options1 = [];
 end
@@ -21,6 +22,7 @@ if nargin <= 7
 	options2 = [];
 end
 
+% Determine dimension
 D1 = numel(lb1);
 D2 = numel(lb2);
 
@@ -34,7 +36,6 @@ defaultOptions1.p = 0.05;
 defaultOptions1.w = 0.1;
 defaultOptions1.Display = 'off';
 defaultOptions1.RecordPoint = 100;
-defaultOptions1.ftarget = -Inf;
 defaultOptions1.TolX = 0;
 defaultOptions1.TolFun = 0;
 defaultOptions1.TolStagnationIteration = 20;
@@ -47,10 +48,10 @@ defaultOptions1.initial.innerState = [];
 
 defaultOptions1.TolCon = 1e-6;
 defaultOptions1.nonlcon = [];
-defaultOptions1.innerMaxIter = 100;
-defaultOptions1.reinitFactor = 0.1;
-defaultOptions1.migrateFactor = 0.8;
-defaultOptions1.archiveSizeFactor = 4;
+defaultOptions1.innerMaxIter = 200;
+defaultOptions1.reinitFactor = 0.5;
+defaultOptions1.migrateFactor = 0.25;
+defaultOptions1.archiveSizeFactor = 5;
 
 options1 = setdefoptions(options1, defaultOptions1);
 
@@ -93,7 +94,9 @@ NP2 = ceil(options2.dimensionFactor * D2);
 
 % Initialize contour data
 if isDisplayIter
-	[XX, YY, ZZ] = minmaxcontourdata(D1, lb1, ub1, lb2, ub2, fitfun);
+	contourOptions.nonlcon = nonlcon;
+	[XX, YY, ZZ, CC] = ...
+		cminmaxcontourdata(D1, lb1, ub1, lb2, ub2, fitfun, contourOptions);
 end
 
 % Initialize population
@@ -119,6 +122,7 @@ end
 
 % Initialize variables
 counteval = 0;
+countcon = 0;
 countiter = 1;
 countStagnation = 0;
 successRate = 0;
@@ -165,13 +169,17 @@ if isempty(f)
 			optionsX2i.initial = innerState{i};
 		end
 		
-		[innerXbest(:, i), innerFbest, innerOut] = ...
+		[innerXbest(:, i), innerFbest, innerOutX{i}] = ...
 			feval(innerSolver, innerFitfun, ...
 			lb2, ub2, innerMaxfunevalsX, optionsX2i);
-		
-		counteval = counteval + innerOut.fes(end);
+				
 		f(i) = -innerFbest;
-		innerState{i} = innerOut.final;
+		innerState{i} = innerOutX{i}.final;
+	end
+	
+	for i = 1 : NP1		
+		counteval = counteval + innerOutX{i}.fes(end);
+		countcon = countcon + innerOutX{i}.countcon;
 	end
 end
 
@@ -199,6 +207,7 @@ end
 if ~isempty(nonlcon)
 	for i = 1 : NP1
 		[cx, ceqx] = feval(nonlcon, X(:, i), innerXbest(:, i));
+		countcon = countcon + 1;
 		cm(i) = cm(i) + sum(cx(cx > 0)) + sum(ceqx(ceqx > 0));
 		nc(i) = nc(i) + sum(cx > 0) + sum(ceqx > 0);
 	end
@@ -242,16 +251,16 @@ end
 % Display
 if isDisplayIter
 	if all(isinf(f))
-		displayitermessages([X; innerXbest], [X; innerXbest], ...
+		dispconitermsg([X; innerXbest], [U; innerUbest], ...
 			cm, countiter, ...
-			XX, YY, ZZ, 'counteval', counteval, ...
+			XX, YY, ZZ, CC, 'counteval', counteval, ...
 			'successRate', successRate, ...
 			'mu_F', mu_F, ...
 			'mu_CR', mu_CR);
 	else
-		displayitermessages([X; innerXbest], [X; innerXbest], ...
+		dispconitermsg([X; innerXbest], [U; innerUbest], ...
 			f(~isinf(f)), countiter, ...
-			XX, YY, ZZ, 'counteval', counteval, ...
+			XX, YY, ZZ, CC, 'counteval', counteval, ...
 			'successRate', successRate, ...
 			'mu_F', mu_F, ...
 			'mu_CR', mu_CR);
@@ -378,7 +387,7 @@ while true
 			
 			% Copy from archive
 			n_migration = ceil(migrateFactor * NP2);
-			beginIndex = NP2 - n_migration - reinitNP2;
+			beginIndex = NP2 - n_migration - reinitNP2;			
 			for j = 1 : n_migration
 				r = floor(archiveSize * rand + 1);
 				V2(:, beginIndex + j, i) = archive(:, r);
@@ -389,6 +398,16 @@ while true
 				V2(:, j, i) = ...
 					lb2 + (ub2 - lb2) .* rand(D2, 1);
 			end
+			
+			% Magic!!
+% 			V2(1, end-3, i) = lb2(1);
+% 			V2(2, end-3, i) = U(2, i);
+% 			V2(1, end-2, i) = lb2(1);
+% 			V2(2, end-2, i) = X(2, i);
+% 			V2(1, end-1, i) = U(1, i);
+% 			V2(2, end-1, i) = lb2(2);
+% 			V2(1, end, i) = X(1, i);
+% 			V2(2, end, i) = lb2(2);
 		end
 	else		
 		for i = 1 : NP1
@@ -404,13 +423,8 @@ while true
 		% Compute fxi, f(i)
 		innerFitfunXi = @(X2) -feval(fitfun, X(:, i), X2);
 		optionsX2i = options2;
-		optionsX2i.initial = innerState{i};
+		optionsX2i.initial = [];
 		optionsX2i.initial.X = V2(:, :, i);
-		optionsX2i.initial.f = [];
-		optionsX2i.initial.mu_F = [];
-		optionsX2i.initial.mu_CR = [];
-		optionsX2i.initial.cm = [];
-		optionsX2i.initial.nc = [];
 		
 		if ~isempty(nonlcon)
 			optionsX2i.nonlcon = @(X2) feval(nonlcon, X(:, i), X2);
@@ -422,20 +436,13 @@ while true
 			innerMaxfunevalsX, optionsX2i);
 		
 		X_Converged_FEs(i) = innerOutX{i}.fes(end);
-		counteval = counteval + innerOutX{i}.fes(end);
 		f(i) = -innerFbest;
 		
 		% Compute fui
 		fitfunU2i = @(U2) -feval(fitfun, U(:, i), U2);
 		optionsU2i = options2;
-		optionsU2i.initial = innerState{i};
+		optionsU2i.initial = [];
 		optionsU2i.initial.X = V2(:, :, i);
-		optionsU2i.initial.f = [];
-		optionsU2i.initial.A = [];
-		optionsU2i.initial.mu_F = [];
-		optionsU2i.initial.mu_CR = [];
-		optionsU2i.initial.cm = [];
-		optionsU2i.initial.nc = [];
 		
 		if ~isempty(nonlcon)
 			optionsU2i.nonlcon = @(U2) feval(nonlcon, U(:, i), U2);
@@ -447,8 +454,14 @@ while true
 			innerMaxfunevalsX, optionsU2i);
 		
 		U_Converged_FEs(i) = innerOutU{i}.fes(end);
-		counteval = counteval + innerOutU{i}.fes(end);
 		fu(i) = -innerFbest;
+	end
+	
+	for i = 1 : NP1
+		counteval = counteval + innerOutX{i}.fes(end);
+		countcon = countcon + innerOutX{i}.countcon;
+		counteval = counteval + innerOutU{i}.fes(end);
+		countcon = countcon + innerOutU{i}.countcon;
 	end
 	
 	% Constraint violation measure
@@ -479,10 +492,12 @@ while true
 	if ~isempty(nonlcon)
 		for i = 1 : NP1
 			[cx, ceqx] = feval(nonlcon, X(:, i), innerXbest(:, i));
+			countcon = countcon + 1;
 			cm(i) = cm(i) + sum(cx(cx > 0)) + sum(ceqx(ceqx > 0));
 			nc(i) = nc(i) + sum(cx > 0) + sum(ceqx > 0);
 			
 			[cu, cequ] = feval(nonlcon, U(:, i), innerUbest(:, i));
+			countcon = countcon + 1;
 			cm_u(i) = cm_u(i) + sum(cu(cu > 0)) + sum(cequ(cequ > 0));
 			nc_u(i) = nc_u(i) + sum(cu > 0) + sum(cequ > 0);
 		end
@@ -530,16 +545,16 @@ while true
 	% Display
 	if isDisplayIter
 		if all(isinf(f))
-			displayitermessages([X; innerXbest], [X; innerXbest], ...
+			dispconitermsg([X; innerXbest], [U; innerUbest], ...
 				cm, countiter, ...
-				XX, YY, ZZ, 'counteval', counteval, ...
+				XX, YY, ZZ, CC, 'counteval', counteval, ...
 				'successRate', successRate, ...
 				'mu_F', mu_F, ...
 				'mu_CR', mu_CR);
 		else
-			displayitermessages([X; innerXbest], [X; innerXbest], ...
+			dispconitermsg([X; innerXbest], [U; innerUbest], ...
 				f(~isinf(f)), countiter, ...
-				XX, YY, ZZ, 'counteval', counteval, ...
+				XX, YY, ZZ, CC, 'counteval', counteval, ...
 				'successRate', successRate, ...
 				'mu_F', mu_F, ...
 				'mu_CR', mu_CR);
@@ -625,5 +640,6 @@ out = finishoutput(out, X, f, counteval, 'final', final, ...
 	'X_Converged_FEs', mean(X_Converged_FEs), ...
 	'U_Converged_FEs', mean(U_Converged_FEs), ...
 	'mu_F', mu_F, ...
-	'mu_CR', mu_CR);
+	'mu_CR', mu_CR, ...
+	'countcon', countcon);
 end
