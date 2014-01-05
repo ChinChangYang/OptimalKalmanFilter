@@ -7,7 +7,7 @@ end
 startTime = tic;
 close all;
 rng(1, 'twister');
-solver = 'minmaxtcjadebin';
+solver = 'mmdeb1b_pce';
 fitfun = 'minminmax_problem';
 D_Min = 5;
 D_Max = 4;

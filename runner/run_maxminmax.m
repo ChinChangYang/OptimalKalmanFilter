@@ -7,7 +7,7 @@ end
 startTime = tic;
 close all;
 rng(1, 'twister');
-solver = 'maxminmaxtcjade';
+solver = 'mmmdeb1b_pce';
 fitfun = 'error_zeta';
 maxfunevals = 1e8;
 solverOptions1.dimensionFactor = 5;

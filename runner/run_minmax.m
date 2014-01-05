@@ -7,7 +7,7 @@ end
 startTime = tic;
 close all;
 rng(1, 'twister');
-solver = 'minmaxtcjadebin';
+solver = 'mmdeb1b_pce';
 fitfun = 'error_nozeta';
 D_Min = 4;
 D_Max = 4;
