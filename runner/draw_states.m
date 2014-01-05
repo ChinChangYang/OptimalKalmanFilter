@@ -2,7 +2,7 @@ function draw_states
 %DRAW_STATES Draw system state and its estimate
 
 %% Min-max Problem for Kalman Filtering
-load('minmax_results_by_minmaxtcjadebin.mat');
+load('minmax_results_by_mmdeb1b_pce_201401021315.mat');
 
 A	= [	xminmax1(1),	xminmax1(2); ...
 		-0.1,			xminmax1(3)];
@@ -27,7 +27,7 @@ ylabel('Magnitude');
 fprintf('Min-max: f = %.4E\n', f);
 
 %% Min-min-max Problem for Kalman Filtering
-load('minminmax_results_by_minmaxtcjadebin.mat');
+load('minminmax_results_by_mmdeb1b_pce_201401021352.mat');
 
 A	= [	xminmax1(1),	xminmax1(2); ...
 		-0.1,			xminmax1(3)];
@@ -52,7 +52,7 @@ ylabel('Magnitude');
 fprintf('Min-min-max: f = %.4E\n', f);
 
 %% Max-min-max Problem for Kalman Filtering
-load('maxminmax_results_by_maxminmaxtcjade.mat');
+load('maxminmax_results_by_mmmdeb1b_pce_201401021930.mat');
 xminmax1 = xbest2;
 xminmax2 = xbest3;
 
