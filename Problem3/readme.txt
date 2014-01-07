@@ -1,15 +1,20 @@
+Max Problem:
+
 Given a Kalman filter (A, C, Q, R):
 
-A = [	[0.1, 0.9],		[0.1, 0.9]; ...
-		-0.1000,		[0.1, 0.9]];
+A = [	+1.0000,	+0.0100; ...
+		+0.0000,	+1.0000];
 
-C = [	+0.0000,		[0.1, 0.9]];
+C = [	+1.0000,	+0.0000];
 
 
-Q = [	+0.0050,	+0.0000; ...
-		+0.0000,	+0.0050];
+Q = [	+0.0001,	+0.0000; ...
+		+0.0000,	+0.0001];
 
-R =		+0.0010;
+R =		+0.0001;
+
+Find a system to maximize the mean square error. The results can be found 
+in XXX.mat.
 
 ===========================================================================
 
@@ -21,7 +26,7 @@ square error f(Kf, Sys):
 	min max f(Kf, Sys)
 	Kf  Sys
 
-The results can be found in minmax_results_by_minmaxtcjadebin_20131016.mat.
+The results can be found in XXX.mat.
 
 ===========================================================================
 
@@ -33,10 +38,7 @@ minimize, and maximize the mean square error f(w, Kf, Sys):
 	min min max f(w, Kf, Sys)
 	 w  Kf  Sys
 
-The results can be found in 
-minminmax_results_by_minmaxtcjadebin_20131016.mat.
-
-Note: w in [0.7, 1.3]
+The results can be found in XXX.mat.
 
 ===========================================================================
 
@@ -48,9 +50,6 @@ minimize, and maximize the mean square error f(w, Kf, Sys):
 	max min max f(w, Kf, Sys)
 	 w  Kf  Sys
 
-The results can be found in 
-maxminmax_results_by_maxminmaxtcjade_20131016.mat.
-
-Note: w in [0.7, 1.3]
+The results can be found in XXX.mat.
 
 ===========================================================================

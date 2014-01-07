@@ -3,15 +3,16 @@ function addprojectpath
 
 % Get path information
 currentPath = cd;
-performancePath = sprintf('%s/performance', currentPath);
 optimizerPath = sprintf('%s/robustoptimizer', currentPath);
-solverPath = sprintf('%s/runner', currentPath);
 utilPath = sprintf('%s/util', currentPath);
 
+% Problem path
+problemPath = sprintf('%s/Problem1', currentPath);
+% problemPath = sprintf('%s/Problem3', currentPath);
+
 % Set path
-addpath(genpath(performancePath));
+addpath(genpath(problemPath));
 addpath(genpath(optimizerPath));
-addpath(genpath(solverPath));
 addpath(genpath(utilPath));
 end
 
