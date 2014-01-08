@@ -5,11 +5,11 @@ close all;
 load('minmin_results_by_jadebin_201311081107.mat');
 
 A	= [	xmin(1),	xmin(2); ...
-		0,			xmin(3)];
-C	= [ xmin(4),	0];
-Q	= [ 0.0001,		0; ...
-		0,			0.0001];
-R	= 0.0001;
+		-0.1,		xmin(3)];
+C	= [ 0,			xmin(4)];
+Q	= [ 0.005,			0; ...
+		0,				0.005];
+R	= 0.001;
 
 K = FeedbackGain(A, C, Q, R);
 [f, X, X_h] = cost_zeta(xmin(1:4), K, xmin(5:8), 1);
@@ -42,11 +42,11 @@ fprintf('Min-min: f = %.4E\n', f);
 load('maxmax_results_by_jadebin_201311081111.mat');
 
 A	= [	xmin(1),	xmin(2); ...
-		0,			xmin(3)];
-C	= [ xmin(4),	0];
-Q	= [ 0.0001,		0; ...
-		0,			0.0001];
-R	= 0.0001;
+		-0.1,		xmin(3)];
+C	= [ 0,			xmin(4)];
+Q	= [ 0.005,			0; ...
+		0,				0.005];
+R	= 0.001;
 
 K = FeedbackGain(A, C, Q, R);
 [f, X, X_h] = cost_zeta(xmin(1:4), K, xmin(5:8), 1);
@@ -79,11 +79,11 @@ fprintf('Max-max: f = %.4E\n', f);
 load('minmax_results_by_mmdeb1b_pce_201401021315.mat');
 
 A	= [	xminmax1(1),	xminmax1(2); ...
-		0,				xminmax1(3)];
-C	= [ xminmax1(4),	0];
-Q	= [ 0.0001,			0; ...
-		0,				0.0001];
-R	= 0.0001;
+		-0.1,			xminmax1(3)];
+C	= [ 0,				xminmax1(4)];
+Q	= [ 0.005,			0; ...
+		0,				0.005];
+R	= 0.001;
 
 K = FeedbackGain(A, C, Q, R);
 [f, X, X_h] = cost_zeta(xminmax1, K, xminmax2, 1);
@@ -116,14 +116,14 @@ fprintf('Min-max: f = %.4E\n', f);
 load('minminmin_results_by_jadebin_201311081236.mat');
 
 A	= [	xmin(1),	xmin(2); ...
-		0,			xmin(3)];
-C	= [ xmin(4),	0];
-Q	= [ 0.0001,		0; ...
-		0,			0.0001];
-R	= 0.0001;
+		-0.1,		xmin(3)];
+C	= [ 0,			xmin(4)];
+Q	= [ 0.005,			0; ...
+		0,				0.005];
+R	= 0.001;
 
 K = FeedbackGain(A, C, Q, R);
-[f, X, X_h] = cost_zeta(xmin(1:4), K, xmin(5:8), 1);
+[f, X, X_h] = cost_zeta(xmin(1:4), K, xmin(5:8), xmin(9));
 X_bar = noisefree_state(xmin(5:8));
 figure(7);
 plot(X(1, :), 'b');
@@ -150,17 +150,17 @@ print('state_08.tif', '-dtiff', '-r400');
 fprintf('Min-min-min: f = %.4E\n', f);
 
 %% Max-max-max Problem for Kalman Filtering
-load('maxminmax_results_by_mmmdeb1b_pce_201401021930.mat');
+load('maxmaxmax_results_by_jadebin_201311081239.mat');
 
 A	= [	xmin(1),	xmin(2); ...
-		0,			xmin(3)];
-C	= [ xmin(4),	0];
-Q	= [ 0.0001,		0; ...
-		0,			0.0001];
-R	= 0.0001;
+		-0.1,		xmin(3)];
+C	= [ 0,			xmin(4)];
+Q	= [ 0.005,			0; ...
+		0,				0.005];
+R	= 0.001;
 
 K = FeedbackGain(A, C, Q, R);
-[f, X, X_h] = cost_zeta(xmin(1:4), K, xmin(5:8), 1);
+[f, X, X_h] = cost_zeta(xmin(1:4), K, xmin(5:8), xmin(9));
 X_bar = noisefree_state(xmin(5:8));
 figure(9);
 plot(X(1, :), 'b');
@@ -190,11 +190,11 @@ fprintf('Max-max-max: f = %.4E\n', f);
 load('minminmax_results_by_mmdeb1b_pce_201401021352.mat');
 
 A	= [	xminmax1(1),	xminmax1(2); ...
-		0,				xminmax1(3)];
-C	= [ xminmax1(4),	0];
-Q	= [ 0.0001,			0; ...
-		0,				0.0001];
-R	= 0.0001;
+		-0.1,			xminmax1(3)];
+C	= [ 0,				xminmax1(4)];
+Q	= [ 0.005,			0; ...
+		0,				0.005];
+R	= 0.001;
 
 K = FeedbackGain(A, C, Q, R);
 [f, X, X_h] = cost_zeta(xminmax1, K, xminmax2, xminmax1(5));
@@ -227,11 +227,11 @@ fprintf('Min-min-max: f = %.4E\n', f);
 load('maxminmax_results_by_mmmdeb1b_pce_201401021930.mat');
 
 A	= [	xbest2(1),		xbest2(2); ...
-		0,				xbest2(3)];
-C	= [ xbest2(4),		0];
-Q	= [ 0.0001,			0; ...
-		0,				0.0001];
-R	= 0.0001;
+		-0.1,			xbest2(3)];
+C	= [ 0,				xbest2(4)];
+Q	= [ 0.005,			0; ...
+		0,				0.005];
+R	= 0.001;
 
 K = FeedbackGain(A, C, Q, R);
 [f, X, X_h] = cost_zeta(xbest2, K, xbest3, xbest1);
